@@ -1,0 +1,19 @@
+syntax = "proto3";
+
+option java_multiple_files = true;
+option java_package = "DistributedRouting.grpc";
+option java_outer_classname = "DistributedRoutingProto";
+
+package grpc;
+
+service Message {
+  rpc SendMessage (MessageRequest) returns (MessageReply) {}
+}
+
+message MessageRequest {
+  int32 node_id = 1;
+}
+
+message MessageReply {
+  bool success = 1;
+}
