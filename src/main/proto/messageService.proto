@@ -10,10 +10,23 @@ service Message {
   rpc SendMessage (MessageRequest) returns (MessageReply) {}
 }
 
+service Log {
+  rpc SendLog (MessageLog) returns (StatusReply) {}
+}
+
+message MessageLog {
+  int32 sending_node = 1;
+  int32 receiving_node = 2;
+}
+
 message MessageRequest {
   int32 node_id = 1;
 }
 
 message MessageReply {
+  bool success = 1;
+}
+
+message StatusReply {
   bool success = 1;
 }

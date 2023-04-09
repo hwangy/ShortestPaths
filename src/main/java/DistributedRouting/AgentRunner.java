@@ -1,8 +1,6 @@
 package DistributedRouting;
 
-import DistributedRouting.grpc.MessageGrpc;
-import DistributedRouting.grpc.MessageReply;
-import DistributedRouting.grpc.MessageRequest;
+import DistributedRouting.grpc.*;
 import DistributedRouting.util.Constants;
 import DistributedRouting.util.GrpcUtil;
 import DistributedRouting.util.Logging;
@@ -20,6 +18,7 @@ import java.util.concurrent.CountDownLatch;
 public class AgentRunner implements Runnable {
 
     private Queue<MessageRequest> receivedMessages;
+    private LogGrpc.LogBlockingStub loggingStub;
     private Map<Integer, MessageGrpc.MessageBlockingStub> channelMap;
     private Set<Integer> neighbors;
     private final int port;
@@ -58,6 +57,12 @@ public class AgentRunner implements Runnable {
             Logging.logError("Failed to initialize server for agent " + id);
         }
 
+        // Connect to logger
+        String target = String.format("localhost:%d", Constants.MESSAGE_PORT);
+        ManagedChannel channel = Grpc.newChannelBuilder(target, InsecureChannelCredentials.create())
+                .build();
+        loggingStub = LogGrpc.newBlockingStub(channel);
+
     }
 
     /**
@@ -72,7 +77,6 @@ public class AgentRunner implements Runnable {
             ManagedChannel channel = Grpc.newChannelBuilder(target, InsecureChannelCredentials.create())
                     .build();
             channelMap.put(neighbor, MessageGrpc.newBlockingStub(channel));
-            Logging.logDebug("(Agent " + id + ") Connecting to " + neighbor);
             while (true) {
                 try {
                     Thread.sleep(100);
@@ -97,7 +101,6 @@ public class AgentRunner implements Runnable {
 
         // Start off the messages
         if (id == 1) {
-            Logging.logService("First message from " + id + " sent!");
             channelMap.get(id + 1).sendMessage(MessageRequest.newBuilder().setNodeId(id).build());
         }
 
@@ -116,6 +119,10 @@ public class AgentRunner implements Runnable {
                                     .setNodeId(id).build());
                             if (!reply.getSuccess()) {
                                 Logging.logService("Received failure from " + vertex);
+                            } else {
+                                loggingStub.sendLog(MessageLog.newBuilder()
+                                        .setSendingNode(id)
+                                        .setReceivingNode(vertex).build());
                             }
                         }
                     }
@@ -148,7 +155,6 @@ public class AgentRunner implements Runnable {
          */
         @Override
         public void sendMessage(MessageRequest req, StreamObserver<MessageReply> responseObserver) {
-            Logging.logDebug("Received message from " + req.getNodeId());
             requestQueue.add(req);
             responseObserver.onNext(GrpcUtil.genSuccessfulReply());
             responseObserver.onCompleted();
