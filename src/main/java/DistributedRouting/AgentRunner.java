@@ -108,10 +108,12 @@ public class AgentRunner implements Runnable {
         int currMessages = 0;
         try {
             while (true) {
-                Thread.sleep(100);
-                if (receivedMessages.size() > 0) {
+                Thread.sleep(1);
+
+                if (receivedMessages.peek() != null) {
                     currMessages++;
                     MessageRequest msg = receivedMessages.poll();
+                    Thread.sleep(1000);
                     // Send message to all neighbors, except the one who sent the message
                     for (Integer vertex : neighbors) {
                         if (vertex != msg.getNodeId()) {

@@ -19,6 +19,11 @@ dependencies {
     testImplementation "io.grpc:grpc-testing:${grpcVersion}"
     testImplementation 'org.junit.jupiter:junit-jupiter:5.8+'
     testImplementation "org.mockito:mockito-core:3.+"
+
+
+    implementation 'org.graphstream:gs-core:1.3'
+    implementation 'org.graphstream:gs-algo:1.3'
+    implementation 'org.graphstream:gs-ui:1.3'
 }
 
 buildscript {

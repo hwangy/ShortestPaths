@@ -8,11 +8,11 @@ import java.util.Set;
  * Simple interface to define a Graph. Graphs have vertices and edges and are
  * able to answer queries like "what are neighbors of vetex 1?".
  */
-public class Graph {
+public class RawGraph {
     private List<Integer> vertices;
     private Map<Integer, Set<Integer>> edges;
 
-    public Graph(List<Integer> vertices, Map<Integer, Set<Integer>> edges) {
+    public RawGraph(List<Integer> vertices, Map<Integer, Set<Integer>> edges) {
         this.vertices = vertices;
         this.edges = edges;
     }

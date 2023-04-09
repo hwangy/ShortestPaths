@@ -13,7 +13,7 @@ public class SampleGraphs {
     /**
      * K3 graph.
      */
-    public static Graph simpleGraph = new Graph(Arrays.asList(1,2,3), ImmutableMap.of(
+    public static RawGraph simpleGraph = new RawGraph(Arrays.asList(1,2,3), ImmutableMap.of(
             1, ImmutableSet.of(2),
             2,ImmutableSet.of(3),
             3,ImmutableSet.of(1)));
