@@ -18,11 +18,15 @@ import java.util.concurrent.CountDownLatch;
 public class AgentRunner implements Runnable {
 
     private Queue<MessageRequest> receivedMessages;
+    private Queue<BFSMessageRequest> bfsReceivedMessages;
     private LogGrpc.LogBlockingStub loggingStub;
     private Map<Integer, MessageGrpc.MessageBlockingStub> channelMap;
     private Set<Integer> neighbors;
     private final int port;
     private final int id;
+
+    private Integer bfsParent;
+    private Boolean bfsAlreadyVisited; 
 
     private CountDownLatch countdown;
 
@@ -42,6 +46,7 @@ public class AgentRunner implements Runnable {
         });
         return server;
     }
+
     public AgentRunner(Integer id, Set<Integer> neighbors, CountDownLatch countdown) {
         Logging.logService("Starting agent " + id);
         this.port = Constants.MESSAGE_PORT + id;
@@ -91,6 +96,24 @@ public class AgentRunner implements Runnable {
         }
     }
 
+    // won't want to do this then. Instead get parent and send message to children/neighbors.
+    public void constructBFSTree(int rootNodeID) {
+        // List of the visited nodes for the BFS tree
+        List<Integer> visitedNodes = new ArrayList<Integer>();
+        // Queue of the nodes to check for the BFS tree
+        Queue<Integer> nodesToCheck = new LinkedList<Integer>();
+
+        visitedNodes.add(rootNodeID);
+        nodesToCheck.add(rootNodeID);
+
+        while(!nodesToCheck.isEmpty()){
+            Integer vertexID = nodesToCheck.remove();
+            // I'm confused by the layout and where to put this constructBFSTree etc....
+
+        }
+
+    }
+
     /**
      * Main loop of AgentRunner. This method regularly checks if a message has been
      * received and, if it has, sends off another message to all of its neighbors
@@ -98,10 +121,17 @@ public class AgentRunner implements Runnable {
      */
     public void run() {
         initializeConnections();
+        bfsAlreadyVisited = false;
 
         // Start off the messages
         if (id == 1) {
+            bfsAlreadyVisited = true;
             channelMap.get(id + 1).sendMessage(MessageRequest.newBuilder().setNodeId(id).build());
+
+            for (Integer neighbor : neighbors) {
+                channelMap.get(neighbor).runBFS(BFSMessageRequest.newBuilder().setNodeId(id).build());
+            }
+            
         }
 
         int messageLimit = 2;
@@ -130,6 +160,30 @@ public class AgentRunner implements Runnable {
                     }
                 }
 
+                // Double check that bfs replies are being sent back to the parent successfully.
+
+                if (bfsReceivedMessages.peek() != null && !bfsAlreadyVisited) {
+                    bfsAlreadyVisited = true;
+                    currMessages++;
+                    BFSMessageRequest msg = bfsReceivedMessages.poll();
+                    bfsParent = msg.getNodeId();
+                    Thread.sleep(1000);
+                    // Send message to all neighbors, except the one who sent the message
+                    for (Integer vertex : neighbors) {
+                        if (vertex != msg.getNodeId()) {
+                            BFSMessageReply reply = channelMap.get(vertex).runBFS(BFSMessageRequest.newBuilder()
+                                    .setNodeId(id).build());
+                            if (!reply.getSuccess()) {
+                                Logging.logService("Received failure from " + vertex);
+                            } else {
+                                loggingStub.sendLog(MessageLog.newBuilder()
+                                        .setSendingNode(id)
+                                        .setReceivingNode(vertex).build());
+                            }
+                        }
+                    }
+                }
+
                 if (currMessages == messageLimit) break;
             }
         } catch (Exception ex) {
@@ -144,6 +198,7 @@ public class AgentRunner implements Runnable {
     class AgentReceiverImpl extends MessageGrpc.MessageImplBase {
 
         private Queue<MessageRequest> requestQueue;
+        private Queue<BFSMessageRequest> bfsRequestQueue;
 
         public AgentReceiverImpl(Queue<MessageRequest> requestQueue) {
             this.requestQueue = requestQueue;
@@ -159,6 +214,13 @@ public class AgentRunner implements Runnable {
         public void sendMessage(MessageRequest req, StreamObserver<MessageReply> responseObserver) {
             requestQueue.add(req);
             responseObserver.onNext(GrpcUtil.genSuccessfulReply());
+            responseObserver.onCompleted();
+        }
+
+        @Override
+        public void runBFS(BFSMessageRequest req, StreamObserver<BFSMessageReply> responseObserver) {
+            bfsRequestQueue.add(req);
+            responseObserver.onNext(GrpcUtil.genSuccessfulReplyBFS());
             responseObserver.onCompleted();
         }
     }
