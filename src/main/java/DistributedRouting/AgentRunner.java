@@ -207,7 +207,7 @@ public class AgentRunner implements Runnable {
         /**
          * On receiving a message, `sendMessage` will add the received `MessageRequest` object
          * to a global queue, which can be read by the main thread.
-         * @param req               A received MessageRequest contained the sender's ID
+         * @param req               A received MessageRequest containing the sender's ID
          * @param responseObserver
          */
         @Override
@@ -217,6 +217,13 @@ public class AgentRunner implements Runnable {
             responseObserver.onCompleted();
         }
 
+        /**
+         * On receiving a BFS message, `runBFS` will add the received `BFSMessageRequest` object
+         * to a global queue, which can be read by the main thread.
+         * UNSURE IF THIS IS CORRECT.
+         * @param req               A received BFSMessageRequest contained the sender's ID
+         * @param responseObserver
+         */
         @Override
         public void runBFS(BFSMessageRequest req, StreamObserver<BFSMessageReply> responseObserver) {
             bfsRequestQueue.add(req);
