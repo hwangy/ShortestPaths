@@ -8,6 +8,7 @@ package grpc;
 
 service Message {
   rpc SendMessage (MessageRequest) returns (MessageReply) {}
+  rpc RunBFS (BFSMessageRequest) returns (BFSMessageReply) {}
 }
 
 service Log {
@@ -28,5 +29,13 @@ message MessageReply {
 }
 
 message StatusReply {
+  bool success = 1;
+}
+
+message BFSMessageRequest {
+  int32 node_id = 1;
+}
+
+message BFSMessageReply {
   bool success = 1;
 }
