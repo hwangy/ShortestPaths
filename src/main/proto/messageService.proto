@@ -9,6 +9,7 @@ package grpc;
 service Message {
   rpc SendMessage (MessageRequest) returns (MessageReply) {}
   rpc RunBFS (BFSMessageRequest) returns (BFSMessageReply) {}
+  rpc SendCoupon (CouponMessageRequest) returns (CouponMessageReply) {}
 }
 
 service Log {
@@ -37,5 +38,14 @@ message BFSMessageRequest {
 }
 
 message BFSMessageReply {
+  bool success = 1;
+}
+
+message CouponMessageRequest {
+  int32 node_id = 1;
+  int32 desired_walk_length = 2;
+}
+
+message CouponMessageReply {
   bool success = 1;
 }
