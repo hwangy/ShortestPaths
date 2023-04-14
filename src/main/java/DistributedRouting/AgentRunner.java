@@ -96,24 +96,46 @@ public class AgentRunner implements Runnable {
         }
     }
 
-    public void phaseOne(Integer lambda){
+    public List<CouponMessageRequest> phaseOne(Integer lambda){
 
         Integer degree = neighbors.size();
         // how to set eta?
         Integer eta = 10;
 
-        List<CouponMessageRequest> couponsCreatedByV = new ArrayList<CouponMessageRequest>();
+        List<CouponMessageRequest> coupons = new ArrayList<CouponMessageRequest>();
         Random randomGenerator = new Random();
         for (int iteration = 1; iteration <= eta * degree; iteration++){
             Integer randomNum = randomGenerator.nextInt(lambda);
-            couponsCreatedByV.add(CouponMessageRequest.newBuilder().setNodeId(id).setDesiredWalkLength(lambda + randomNum).build());
+            // Create the initial messages ('coupons') for node v containing the node's ID and the desired walk length of lambda + randomNum
+            coupons.add(CouponMessageRequest.newBuilder().setNodeId(id).setDesiredWalkLength(lambda + randomNum).build());
         }
 
         for (int i = 1; i <= 2 * lambda; i++){
-            // consider coupon C that have from last iteration. 
-            // If desired walk is at most i, then v keeps this coupon. Else, v picks a neighbor u uniformly at random and forwards C to u.
-            // And then needs to wait in case receives a coupon right?
+            List<CouponMessageRequest> couponsToRemove = new ArrayList<CouponMessageRequest>();
+            for (CouponMessageRequest coupon : coupons) {
+                if(coupon.getDesiredWalkLength() > i) {
+
+                    // Pick a neighbor of the vertex uniformly at random
+                    Integer randomIndex = randomGenerator.nextInt(coupons.size());
+                    Iterator<Integer> iter = neighbors.iterator();
+                    for (int j = 0; j < randomIndex; j++) {
+                        iter.next();
+                    }
+                    Integer randomNeighbor = iter.next();
+                    channelMap.get(randomNeighbor).sendCoupon(coupon);
+                    couponsToRemove.add(coupon);
+                }
+            }
+
+            for (CouponMessageRequest coupon : couponsToRemove) {
+                coupons.remove(coupon);
+            }
+
+            // TO ADD: WAITING FOR THE POTENTIAL MESSAGES FROM NEIGHBORING NODES
         }
+
+        // Return the final coupons after the iterations.
+        return coupons;
 
     }
 
@@ -129,7 +151,7 @@ public class AgentRunner implements Runnable {
         // how to set lambda / should we put it as a parameter?
         Integer lambda = 10;
 
-        phaseOne(lambda);
+        List<CouponMessageRequest> coupons = phaseOne(lambda);
      
         // Start off the messages
         if (id == 1) {
@@ -207,6 +229,7 @@ public class AgentRunner implements Runnable {
 
         private Queue<MessageRequest> requestQueue;
         private Queue<BFSMessageRequest> bfsRequestQueue;
+        private Queue<CouponMessageRequest> couponRequestQueue;
 
         public AgentReceiverImpl(Queue<MessageRequest> requestQueue) {
             this.requestQueue = requestQueue;
@@ -236,6 +259,13 @@ public class AgentRunner implements Runnable {
         public void runBFS(BFSMessageRequest req, StreamObserver<BFSMessageReply> responseObserver) {
             bfsRequestQueue.add(req);
             responseObserver.onNext(GrpcUtil.genSuccessfulReplyBFS());
+            responseObserver.onCompleted();
+        }
+
+        @Override
+        public void sendCoupon(CouponMessageRequest req, StreamObserver<CouponMessageReply> responseObserver) {
+            couponRequestQueue.add(req);
+            responseObserver.onNext(GrpcUtil.genSuccessfulReplyCoupon());
             responseObserver.onCompleted();
         }
     }
