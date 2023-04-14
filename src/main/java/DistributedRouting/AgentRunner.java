@@ -102,19 +102,19 @@ public class AgentRunner implements Runnable {
         // how to set eta?
         Integer eta = 10;
 
-        List<Integer> randomIntegers = new ArrayList<Integer>();
+        List<CouponMessageRequest> couponsCreatedByV = new ArrayList<CouponMessageRequest>();
         Random randomGenerator = new Random();
         for (int iteration = 1; iteration <= eta * degree; iteration++){
-            randomIntegers.add(randomGenerator.nextInt(lambda));
+            Integer randomNum = randomGenerator.nextInt(lambda);
+            couponsCreatedByV.add(CouponMessageRequest.newBuilder().setNodeId(id).setDesiredWalkLength(lambda + randomNum).build());
         }
-        
-        // construct messages
 
-        // for i from 1 to 2 lambda
+        for (int i = 1; i <= 2 * lambda; i++){
             // consider coupon C that have from last iteration. 
             // If desired walk is at most i, then v keeps this coupon. Else, v picks a neighbor u uniformly at random and forwards C to u.
+            // And then needs to wait in case receives a coupon right?
+        }
 
-        // Start off the messages
     }
 
     /**
@@ -130,7 +130,8 @@ public class AgentRunner implements Runnable {
         Integer lambda = 10;
 
         phaseOne(lambda);
-
+     
+        // Start off the messages
         if (id == 1) {
             bfsAlreadyVisited = true;
             channelMap.get(id + 1).sendMessage(MessageRequest.newBuilder().setNodeId(id).build());
