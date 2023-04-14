@@ -96,22 +96,25 @@ public class AgentRunner implements Runnable {
         }
     }
 
-    // won't want to do this then. Instead get parent and send message to children/neighbors.
-    public void constructBFSTree(int rootNodeID) {
-        // List of the visited nodes for the BFS tree
-        List<Integer> visitedNodes = new ArrayList<Integer>();
-        // Queue of the nodes to check for the BFS tree
-        Queue<Integer> nodesToCheck = new LinkedList<Integer>();
+    public void phaseOne(Integer lambda){
 
-        visitedNodes.add(rootNodeID);
-        nodesToCheck.add(rootNodeID);
+        Integer degree = neighbors.size();
+        // how to set eta?
+        Integer eta = 10;
 
-        while(!nodesToCheck.isEmpty()){
-            Integer vertexID = nodesToCheck.remove();
-            // I'm confused by the layout and where to put this constructBFSTree etc....
-
+        List<Integer> randomIntegers = new ArrayList<Integer>();
+        Random randomGenerator = new Random();
+        for (int iteration = 1; iteration <= eta * degree; iteration++){
+            randomIntegers.add(randomGenerator.nextInt(lambda));
         }
+        
+        // construct messages
 
+        // for i from 1 to 2 lambda
+            // consider coupon C that have from last iteration. 
+            // If desired walk is at most i, then v keeps this coupon. Else, v picks a neighbor u uniformly at random and forwards C to u.
+
+        // Start off the messages
     }
 
     /**
@@ -123,7 +126,11 @@ public class AgentRunner implements Runnable {
         initializeConnections();
         bfsAlreadyVisited = false;
 
-        // Start off the messages
+        // how to set lambda / should we put it as a parameter?
+        Integer lambda = 10;
+
+        phaseOne(lambda);
+
         if (id == 1) {
             bfsAlreadyVisited = true;
             channelMap.get(id + 1).sendMessage(MessageRequest.newBuilder().setNodeId(id).build());
