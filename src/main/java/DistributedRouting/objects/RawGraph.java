@@ -1,8 +1,8 @@
 package DistributedRouting.objects;
 
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import com.google.common.collect.Sets;
+
+import java.util.*;
 
 /**
  * Simple interface to define a Graph. Graphs have vertices and edges and are
@@ -33,5 +33,24 @@ public class RawGraph {
      */
     public Set<Integer> neighborsOf(int vertex) {
         return edges.get(vertex);
+    }
+
+    /**
+     * Returns a representation of the graph as an undirected graph.
+     * @return  An undirected graph
+     */
+    public RawGraph asUndirectedGraph() {
+        // Make mutable
+        Map<Integer, Set<Integer>> newEdges = new HashMap<>();
+
+        for (Integer source : edges.keySet()) {
+            Set<Integer> destinations = new HashSet<>(edges.get(source));
+            newEdges.merge(source, destinations, Sets::union);
+            for (Integer dest : destinations) {
+                Set<Integer> dests = newEdges.compute(dest, (k,v) -> (v == null) ? new HashSet<>() : v);
+                dests.add(source);
+            }
+        }
+        return new RawGraph(new ArrayList<>(vertices), newEdges);
     }
 }

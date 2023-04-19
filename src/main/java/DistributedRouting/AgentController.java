@@ -6,6 +6,7 @@ import DistributedRouting.grpc.StatusReply;
 import DistributedRouting.objects.RawGraph;
 import DistributedRouting.objects.SampleGraphs;
 import DistributedRouting.util.Constants;
+import DistributedRouting.util.GraphUtil;
 import DistributedRouting.util.Logging;
 import io.grpc.Grpc;
 import io.grpc.InsecureServerCredentials;
@@ -13,16 +14,20 @@ import io.grpc.Server;
 import io.grpc.stub.StreamObserver;
 
 import java.util.Map;
+import java.util.Random;
+import java.util.Scanner;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
 
 import org.graphstream.graph.Graph;
 import org.graphstream.graph.implementations.SingleGraph;
-import org.graphstream.ui.spriteManager.Sprite;
-import org.graphstream.ui.spriteManager.SpriteManager;
-import org.graphstream.ui.view.Viewer;
 
 public class AgentController {
+
+    private static final Lock graphLock = new ReentrantLock();
 
     public static Server initializeListener(Graph graphVis) throws Exception {
         Server server = Grpc.newServerBuilderForPort(Constants.MESSAGE_PORT, InsecureServerCredentials.create())
@@ -32,36 +37,64 @@ public class AgentController {
         Runtime.getRuntime().addShutdownHook(new Thread() {
             @Override
             public void run() {
-                // Use stderr here since the logger may have been reset by its JVM shutdown hook.
-                System.err.println("*** shutting down gRPC server since JVM is shutting down");
                 interrupt();
-                System.err.println("*** server shut down");
             }
         });
         return server;
     }
 
+    /**
+     * Draws the graph using the GraphStream framework.
+     * @param rawGraph  The raw graph consisting of edges and vertices.
+     * @return  returns the GraphStream graph
+     */
     public static Graph drawGraph(RawGraph rawGraph) {
         Graph graph = new SingleGraph("Graph");
         for (Integer vertex : rawGraph.getVertices()) {
             graph.addNode(vertex.toString());
         }
+        graph.getNode(String.valueOf(1)).setAttribute("ui.class", "terminal");
         for (Map.Entry<Integer, Set<Integer>> entry : rawGraph.getEdges().entrySet()) {
             String s = entry.getKey().toString();
             for (Integer dest : entry.getValue()) {
                 String d = dest.toString();
-                String label = String.format("(%s,%s)", s, d);
+                String label = GraphUtil.edgeLabel(s,d);
                 Logging.logDebug(label);
                 graph.addEdge(label, s, d);
             }
         }
-        Viewer viewer = graph.display();
+        graph.display();
         return graph;
     }
 
     public static void main(String[] args) {
-        RawGraph graph = SampleGraphs.simpleGraph;
+        // Ask user for a preset seed, or generate a new one
+        Scanner inputReader = new Scanner(System.in);
+        System.out.println("Seed?");
+        String seed = inputReader.nextLine();
+        Random random;
+        if (seed.isEmpty()) {
+            random = new Random();
+            Long currSeed = random.nextLong();
+            random.setSeed(currSeed);
+            System.out.println("Using seed: " + currSeed);
+        } else {
+            random = new Random(Long.valueOf(seed));
+        }
+
+        RawGraph graph = SampleGraphs.erdosReyniGraph(20,0.15f, random);
         Graph graphVis = drawGraph(graph);
+        graphVis.setAttribute("ui.stylesheet", """
+                edge {
+                    size: 2px;
+                    fill-mode: dyn-plain;
+                    fill-color: black, green;
+                }
+                
+                node.terminal {
+                    fill-color: blue;
+                }""");
+
         try {
             initializeListener(graphVis);
         } catch (Exception ex) {
@@ -73,6 +106,7 @@ public class AgentController {
         CountDownLatch countdown = new CountDownLatch(graph.getVertices().size());
 
         // Initialize Threads for each vertex
+        graph = graph.asUndirectedGraph();
         for (Integer vertex : graph.getVertices()) {
             Thread agent = new Thread(new AgentRunner(vertex, graph.neighborsOf(vertex), countdown));
             agent.start();
@@ -88,20 +122,21 @@ public class AgentController {
 
     static class AgentLoggerImpl extends LogGrpc.LogImplBase {
         private Graph graphVis;
-        private Sprite sprite;
         public AgentLoggerImpl(Graph graphVis) {
             this.graphVis = graphVis;
-            SpriteManager spriteManager = new SpriteManager(this.graphVis);
-            sprite = spriteManager.addSprite("loc");
-            sprite.attachToNode("1");
         }
 
         @Override
         public void sendLog(MessageLog req, StreamObserver<StatusReply> responseObserver) {
-            String label = String.format("(%s,%s)", req.getSendingNode(), req.getReceivingNode());
-            sprite.attachToEdge(label);
-            sprite.setPosition(0.5);
-            Logging.logInfo("Set to " + label);
+            String label = GraphUtil.edgeLabel(req.getSendingNode(), req.getReceivingNode());
+            try {
+                graphLock.tryLock(500, TimeUnit.MILLISECONDS);
+                graphVis.getEdge(label).setAttribute("ui.color", 1);
+            } catch (InterruptedException ex) {
+                Logging.logError("Failed to acquire lock for graph update: " + ex.getMessage());
+            } finally {
+                graphLock.unlock();
+            }
             responseObserver.onNext(StatusReply.newBuilder().setSuccess(true).build());
             responseObserver.onCompleted();
         }

@@ -34,7 +34,8 @@ message StatusReply {
 }
 
 message BFSMessageRequest {
-  int32 node_id = 1;
+  int32 origin_id = 1;
+  int32 parent_id = 2;
 }
 
 message BFSMessageReply {
