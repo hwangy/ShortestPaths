@@ -68,8 +68,9 @@ public class AgentController {
     }
 
     // Some nice seeds:
-    // n = 20 782097489244492214
-    // n = 20 5924385651977311760
+    // n = 5 (p=0.5) 3632690309280280925
+    // n = 20 (p=0.15) 782097489244492214
+    // n = 20 (p=0.15) 5924385651977311760
     // n = 40 5843648202025435093
 
     public static void main(String[] args) {
@@ -87,7 +88,7 @@ public class AgentController {
             random = new Random(Long.valueOf(seed));
         }
 
-        RawGraph graph = SampleGraphs.erdosReyniGraph(20,0.15f, random);
+        RawGraph graph = SampleGraphs.erdosReyniGraph(5,0.5f, random);
         Graph graphVis = drawGraph(graph);
         graphVis.setAttribute("ui.stylesheet", """
                 edge {
