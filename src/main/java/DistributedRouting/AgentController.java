@@ -67,6 +67,11 @@ public class AgentController {
         return graph;
     }
 
+    // Some nice seeds:
+    // n = 20 782097489244492214
+    // n = 20 5924385651977311760
+    // n = 40 5843648202025435093
+
     public static void main(String[] args) {
         // Ask user for a preset seed, or generate a new one
         Scanner inputReader = new Scanner(System.in);
@@ -107,8 +112,9 @@ public class AgentController {
 
         // Initialize Threads for each vertex
         graph = graph.asUndirectedGraph();
+        int lambda = 1;
         for (Integer vertex : graph.getVertices()) {
-            Thread agent = new Thread(new AgentRunner(vertex, graph.neighborsOf(vertex), countdown));
+            Thread agent = new Thread(new AgentRunner(vertex, graph.neighborsOf(vertex), countdown, lambda));
             agent.start();
         }
 

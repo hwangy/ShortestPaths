@@ -7,7 +7,6 @@ option java_outer_classname = "DistributedRoutingProto";
 package grpc;
 
 service Message {
-  rpc SendMessage (MessageRequest) returns (MessageReply) {}
   rpc RunBFS (BFSMessageRequest) returns (BFSMessageReply) {}
   rpc SendCoupon (CouponMessageRequest) returns (CouponMessageReply) {}
 }
@@ -43,8 +42,10 @@ message BFSMessageReply {
 }
 
 message CouponMessageRequest {
-  int32 node_id = 1;
-  int32 desired_walk_length = 2;
+  bool forward = 1;
+  int32 origin_id = 2;
+  int32 parent_id = 3;
+  int32 current_walk_length = 4;
 }
 
 message CouponMessageReply {

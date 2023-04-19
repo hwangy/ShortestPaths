@@ -6,6 +6,7 @@ import DistributedRouting.util.GrpcUtil;
 import DistributedRouting.util.Logging;
 import io.grpc.*;
 import io.grpc.stub.StreamObserver;
+import org.checkerframework.checker.units.qual.A;
 
 import java.io.IOException;
 import java.util.*;
@@ -18,13 +19,18 @@ import java.util.concurrent.ThreadLocalRandom;
  */
 public class AgentRunner implements Runnable {
 
-    private Queue<MessageRequest> receivedMessages;
     private Queue<BFSMessageRequest> bfsReceivedMessages;
+
+    private HashMap<Integer, Queue<CouponMessageRequest>> receivedCoupons;
+    private HashMap<Integer, Set<Integer>> receivedNeighbors;
+
     private LogGrpc.LogBlockingStub loggingStub;
     private Map<Integer, MessageGrpc.MessageBlockingStub> channelMap;
     private Set<Integer> neighbors;
     private final int port;
     private final int id;
+
+    private final int lambda;
 
     private Integer bfsParent;
     private Boolean bfsAlreadyVisited; 
@@ -33,7 +39,7 @@ public class AgentRunner implements Runnable {
 
     public Server initializeListener() throws IOException {
         Server server = Grpc.newServerBuilderForPort(port, InsecureServerCredentials.create())
-                .addService(new AgentReceiverImpl(receivedMessages, bfsReceivedMessages))
+                .addService(new AgentReceiverImpl(bfsReceivedMessages))
                 .build()
                 .start();
         Runtime.getRuntime().addShutdownHook(new Thread() {
@@ -45,14 +51,22 @@ public class AgentRunner implements Runnable {
         return server;
     }
 
-    public AgentRunner(Integer id, Set<Integer> neighbors, CountDownLatch countdown) {
+    public AgentRunner(Integer id, Set<Integer> neighbors, CountDownLatch countdown, int lambda) {
         Logging.logService("Starting agent " + id);
-        this.port = Constants.MESSAGE_PORT + id;
+        port = Constants.MESSAGE_PORT + id;
         this.id = id;
-        this.receivedMessages = new LinkedList<>();
-        this.bfsReceivedMessages = new LinkedList<>();
         this.neighbors = neighbors;
         this.countdown = countdown;
+        this.lambda = lambda;
+
+        bfsReceivedMessages = new LinkedList<>();
+        receivedCoupons = new HashMap<>();
+        receivedNeighbors = new HashMap<>();
+        for (int i = 0; i <= lambda; i++) {
+            receivedCoupons.put(i, new LinkedList<>());
+            receivedNeighbors.put(i, new HashSet<>());
+        }
+
         channelMap = new HashMap<>();
 
         try {
@@ -95,46 +109,73 @@ public class AgentRunner implements Runnable {
         }
     }
 
-    public List<CouponMessageRequest> phaseOne(Integer lambda){
+    public List<CouponMessageRequest> phaseOne(){
 
         //Integer degree = neighbors.size();
         // how to set eta?
-        Integer eta = 10;
+        Integer eta = 1;
 
         List<CouponMessageRequest> coupons = new ArrayList<>();
-        for (int iteration = 1; iteration <= eta; iteration++){
-            Integer randomNum = ThreadLocalRandom.current().nextInt(lambda);
+        int numNeighbors = neighbors.size();
+        List<Integer> neighborList = neighbors.stream().toList();
+
+        Queue<CouponMessageRequest> startingCoupons = new LinkedList<>();
+        for (int i = 1; i <= numNeighbors; i++){
+            // Integer randomNum = ThreadLocalRandom.current().nextInt(lambda);
             // Create the initial messages ('coupons') for node v containing the node's ID and the desired walk length of lambda + randomNum
-            coupons.add(CouponMessageRequest.newBuilder().setNodeId(id).setDesiredWalkLength(lambda + randomNum).build());
+            startingCoupons.add(CouponMessageRequest.newBuilder()
+                    .setCurrentWalkLength(0).setOriginId(id).setParentId(-1)
+                    .setForward(i <= eta).build());
         }
+        receivedCoupons.put(1, startingCoupons);
+        receivedNeighbors.put(1, new HashSet<>(neighbors));
 
-        for (int i = 1; i <= 2 * lambda; i++){
-            List<CouponMessageRequest> couponsToRemove = new ArrayList<CouponMessageRequest>();
-            for (CouponMessageRequest coupon : coupons) {
-                if(coupon.getDesiredWalkLength() > i) {
+        for (int iter = 1; iter <= lambda; iter++) {
+            try {
+                while (true) {
+                    Thread.sleep(1);
+                    // Wait until we've received a message from all neighbors
+                    if (receivedNeighbors.get(iter).size() == neighbors.size()) {
+                        Set<Integer> receivedFromNeighbors = new HashSet<>(neighbors);
+                        Queue<CouponMessageRequest> couponsToProcess = receivedCoupons.get(iter);
 
-                    // Pick a neighbor of the vertex uniformly at random
-                    Integer randomIndex = ThreadLocalRandom.current().nextInt(coupons.size());
-                    Iterator<Integer> iter = neighbors.iterator();
-                    for (int j = 0; j < randomIndex; j++) {
-                        iter.next();
+                        Thread.sleep(1000);
+                        while (couponsToProcess.size() > 0) {
+                            CouponMessageRequest req = couponsToProcess.poll();
+                            Logging.logDebug("Node " + id + " received coupon from " + req.getParentId());
+
+                            if (req.getForward()) {
+                                if (req.getCurrentWalkLength() < lambda) {
+                                    // Pick a neighbor of the vertex uniformly at random
+                                    Integer randomNeighbor = neighborList.get(
+                                            ThreadLocalRandom.current().nextInt(neighbors.size()));
+                                    channelMap.get(randomNeighbor).sendCoupon(
+                                            CouponMessageRequest.newBuilder(req)
+                                                    .setParentId(id)
+                                                    .setCurrentWalkLength(req.getCurrentWalkLength() + 1).build());
+
+                                    // This node will have received a message in this iteration
+                                    receivedFromNeighbors.remove(randomNeighbor);
+                                } else {
+                                    coupons.add(req);
+                                }
+                            }
+                        }
+
+                        // Now forward terminal coupons to the rest of the neighbors which
+                        // have not received a message
+                        for (Integer others : receivedFromNeighbors) {
+                            channelMap.get(others).sendCoupon(CouponMessageRequest.newBuilder()
+                                    .setParentId(id).setForward(false).build());
+                        }
+                        break;
                     }
-                    Integer randomNeighbor = iter.next();
-                    channelMap.get(randomNeighbor).sendCoupon(coupon);
-                    couponsToRemove.add(coupon);
                 }
+            } catch (InterruptedException ex) {
+                Logging.logError("Encountered exception in thread " + id + ": " + ex.getMessage());
             }
-
-            for (CouponMessageRequest coupon : couponsToRemove) {
-                coupons.remove(coupon);
-            }
-
-            // TO ADD: WAITING FOR THE POTENTIAL MESSAGES FROM NEIGHBORING NODES
-        }
-
-        // Return the final coupons after the iterations.
-        return coupons;
-
+       }
+       return coupons;
     }
 
     /**
@@ -147,10 +188,10 @@ public class AgentRunner implements Runnable {
         bfsAlreadyVisited = false;
 
         // how to set lambda / should we put it as a parameter?
-        Integer lambda = 10;
+        Integer lambda = 1;
 
-        /*List<CouponMessageRequest> coupons = phaseOne(lambda);*/
-     
+        List<CouponMessageRequest> coupons = phaseOne();
+
         // Start off the messages
         if (id == 1) {
             bfsReceivedMessages.add(BFSMessageRequest.newBuilder()
@@ -197,26 +238,10 @@ public class AgentRunner implements Runnable {
      */
     class AgentReceiverImpl extends MessageGrpc.MessageImplBase {
 
-        private Queue<MessageRequest> requestQueue;
         private Queue<BFSMessageRequest> bfsRequestQueue;
-        private Queue<CouponMessageRequest> couponRequestQueue;
 
-        public AgentReceiverImpl(Queue<MessageRequest> requestQueue, Queue<BFSMessageRequest> bfsQueue) {
-            this.requestQueue = requestQueue;
+        public AgentReceiverImpl(Queue<BFSMessageRequest> bfsQueue) {
             this.bfsRequestQueue = bfsQueue;
-        }
-
-        /**
-         * On receiving a message, `sendMessage` will add the received `MessageRequest` object
-         * to a global queue, which can be read by the main thread.
-         * @param req               A received MessageRequest containing the sender's ID
-         * @param responseObserver
-         */
-        @Override
-        public void sendMessage(MessageRequest req, StreamObserver<MessageReply> responseObserver) {
-            requestQueue.add(req);
-            responseObserver.onNext(GrpcUtil.genSuccessfulReply());
-            responseObserver.onCompleted();
         }
 
         /**
@@ -235,7 +260,8 @@ public class AgentRunner implements Runnable {
 
         @Override
         public void sendCoupon(CouponMessageRequest req, StreamObserver<CouponMessageReply> responseObserver) {
-            couponRequestQueue.add(req);
+            receivedCoupons.get(req.getCurrentWalkLength()).add(req);
+            receivedNeighbors.get(req.getCurrentWalkLength()).add(req.getParentId());
             responseObserver.onNext(GrpcUtil.genSuccessfulReplyCoupon());
             responseObserver.onCompleted();
         }
