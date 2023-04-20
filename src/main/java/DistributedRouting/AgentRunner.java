@@ -178,6 +178,46 @@ public class AgentRunner implements Runnable {
        return coupons;
     }
 
+    public void sendMoreCoupons(int vertex, int eta, int lambda) {
+        List<CouponMessageRequest> coupons = sendMoreCouponsPart1(vertex, eta, lambda);
+        sendMoreCouponsPart2(vertex, eta, lambda, coupons);
+    }
+
+    public List<CouponMessageRequest>  sendMoreCouponsPart1(int vertex, int eta, int lambda) {
+        List<CouponMessageRequest> newCoupons = new ArrayList<CouponMessageRequest>();
+        List<Integer> neighborList = neighbors.stream().toList();
+        for (int j = 1; j <= eta; j++) {
+            newCoupons.add(CouponMessageRequest.newBuilder()
+                    .setCurrentWalkLength(0).setOriginId(id).setParentId(-1)
+                    .setForward(true).build());
+
+        }
+
+        for (int i = 1; i <= lambda; i++) {
+            for(CouponMessageRequest coupon : newCoupons) {
+                Integer randomNeighbor = neighborList.get(
+                    ThreadLocalRandom.current().nextInt(neighbors.size()));
+                channelMap.get(randomNeighbor).sendCoupon(coupon);
+                // Need to send the number of new coupons for which z is
+                // picked as a receiver, denoted by c(u, v).
+            }
+        }
+
+        return newCoupons;
+    }
+
+    public void sendMoreCouponsPart2(int vertex, int eta, int lambda, List<CouponMessageRequest> coupons) {
+        for (int i = 0; i <= lambda - 1; i++) {
+            Integer randomNum = Math.random();
+            if (randomNum <= 1/(lambda - i)) {
+                // stop sending the coupon further
+            }
+        }
+
+
+        
+    }
+
     /**
      * Main loop of AgentRunner. This method regularly checks if a message has been
      * received and, if it has, sends off another message to all of its neighbors
