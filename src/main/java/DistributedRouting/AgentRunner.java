@@ -234,25 +234,13 @@ public class AgentRunner implements Runnable {
                     channelMap.get(randomNeighbor).sendCoupon(coupon);
                 }
             }
-        }        
+        }       
     }
 
-    /**
-     * Main loop of AgentRunner. This method regularly checks if a message has been
-     * received and, if it has, sends off another message to all of its neighbors
-     * except the one from which the message was received.
-     */
-    public void run() {
-        initializeConnections();
-        bfsAlreadyVisited = false;
+    public void bfsTree() {
 
-        // how to set lambda / should we put it as a parameter?
-        Integer lambda = 1;
-
-        List<CouponMessageRequest> coupons = phaseOne();
-
-        // Start off the messages
-        if (id == 1) {
+         // Start off the messages
+         if (id == 1) {
             bfsReceivedMessages.add(BFSMessageRequest.newBuilder()
                     .setOriginId(-1)
                     .setParentId(-1).build());
@@ -290,6 +278,61 @@ public class AgentRunner implements Runnable {
             ex.printStackTrace();
         }
         countdown.countDown();
+    }
+
+    public Integer sampleCoupon(Integer startingNode) {
+        bfsTree();
+        // Rest of sample coupon here
+
+        return 1;
+    }
+
+    public Integer phaseTwo() {
+        Integer destinationNode = -1;
+
+        // Source node creates token and set of connectors
+        if (id == 1) {
+            CouponMessageRequest token = CouponMessageRequest.newBuilder()
+                .setCurrentWalkLength(0).setOriginId(id).setParentId(-1)
+                .setForward(true).build();
+            List<Integer> connectors = new LinkedList<Integer>();
+            // Initially C = {s} where s is the source node
+            connectors.add(id);
+        }
+
+        // To be removed (just to make sure all function dependencies are working for now.)
+        sampleCoupon(id);
+
+
+       // while(the length of the walk completed is at most l - 2 lambda) {
+            // if currently holding the token:
+                // call sampleCoupon(id); --> Call this 2x? (Line 5 and Line 8 of Algo 3?)
+                // if v' = null:
+                    //sendMoreCoupons(id, eta, lambda)
+                    // call Integer v_prime = sampleCoupon(id);
+
+            // v sends the token to v'
+            // v' deletes C so that C will not be sampled again
+            // connectors.add(v_prime);
+       // }
+
+        return destinationNode;
+    }
+
+    /**
+     * Main loop of AgentRunner. This method regularly checks if a message has been
+     * received and, if it has, sends off another message to all of its neighbors
+     * except the one from which the message was received.
+     */
+    public void run() {
+        initializeConnections();
+        bfsAlreadyVisited = false;
+
+        // how to set lambda / should we put it as a parameter?
+        Integer lambda = 1;
+
+        List<CouponMessageRequest> coupons = phaseOne();
+        Integer destinationNode = phaseTwo();
     }
 
     /**
