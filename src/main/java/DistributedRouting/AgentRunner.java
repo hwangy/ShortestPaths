@@ -211,10 +211,20 @@ public class AgentRunner implements Runnable {
     }
 
     public void sendMoreCouponsPart2(int vertex, int eta, int lambda, List<CouponMessageRequest> coupons) {
+        List<Integer> sourceNodes = new LinkedList<Integer>();
+        List<Integer> neighborList = neighbors.stream().toList();
+        
         for (int i = 0; i <= lambda - 1; i++) {
-            Integer randomNum = Math.random();
-            if (randomNum <= 1/(lambda - i)) {
-                // stop sending the coupon further
+            for (CouponMessageRequest coupon : coupons) {
+                double randomNum = Math.random();
+                if (randomNum <= 1/(lambda - i)) {
+                    sourceNodes.add(coupon.getOriginId());
+                } else {
+                    // Each node picks a neighbor correspondingly: does this mean uniformly?
+                    Integer randomNeighbor = neighborList.get(
+                        ThreadLocalRandom.current().nextInt(neighbors.size()));
+                    channelMap.get(randomNeighbor).sendCoupon(coupon);
+                }
             }
         }
 
