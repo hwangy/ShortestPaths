@@ -7,6 +7,7 @@ import DistributedRouting.util.Logging;
 import io.grpc.*;
 import io.grpc.stub.StreamObserver;
 import org.checkerframework.checker.units.qual.A;
+import scala.Int;
 
 import java.io.IOException;
 import java.util.*;
@@ -127,22 +128,23 @@ public class AgentRunner implements Runnable {
                     .setCurrentWalkLength(0).setOriginId(id).setParentId(-1)
                     .setForward(i <= eta).build());
         }
-        receivedCoupons.put(1, startingCoupons);
-        receivedNeighbors.put(1, new HashSet<>(neighbors));
+        receivedCoupons.put(0, startingCoupons);
+        receivedNeighbors.put(0, new HashSet<>(neighbors));
 
-        for (int iter = 1; iter <= lambda; iter++) {
+        // Iterate from 1 to lambda + 1. The final round is used for bookkeeping
+        for (int iter = 1; iter <= lambda + 1; iter++) {
             try {
                 while (true) {
                     Thread.sleep(1);
-                    // Wait until we've received a message from all neighbors
-                    if (receivedNeighbors.get(iter).size() == neighbors.size()) {
-                        Set<Integer> receivedFromNeighbors = new HashSet<>(neighbors);
-                        Queue<CouponMessageRequest> couponsToProcess = receivedCoupons.get(iter);
+                    // Wait until we've received a message from all neighbors from
+                    // iteration iter-1
+                    if (receivedNeighbors.get(iter-1).size() == neighbors.size()) {
+                        Set<Integer> receivedFromNeighbors = receivedNeighbors.get(iter-1);
+                        Queue<CouponMessageRequest> couponsToProcess = receivedCoupons.get(iter-1);
 
                         Thread.sleep(1000);
                         while (couponsToProcess.size() > 0) {
                             CouponMessageRequest req = couponsToProcess.poll();
-                            Logging.logDebug("Node " + id + " received coupon from " + req.getParentId());
 
                             if (req.getForward()) {
                                 if (req.getCurrentWalkLength() < lambda) {
@@ -162,10 +164,12 @@ public class AgentRunner implements Runnable {
                             }
                         }
 
+                        if (iter == lambda + 1) break;
                         // Now forward terminal coupons to the rest of the neighbors which
                         // have not received a message
                         for (Integer others : receivedFromNeighbors) {
                             channelMap.get(others).sendCoupon(CouponMessageRequest.newBuilder()
+                                    .setCurrentWalkLength(iter)
                                     .setParentId(id).setForward(false).build());
                         }
                         break;
