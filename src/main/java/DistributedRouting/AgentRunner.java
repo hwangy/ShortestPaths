@@ -112,8 +112,6 @@ public class AgentRunner implements Runnable {
 
     public List<CouponMessageRequest> phaseOne(){
 
-        //Integer degree = neighbors.size();
-        // how to set eta?
         Integer eta = 1;
 
         List<CouponMessageRequest> coupons = new ArrayList<>();
@@ -122,8 +120,6 @@ public class AgentRunner implements Runnable {
 
         Queue<CouponMessageRequest> startingCoupons = new LinkedList<>();
         for (int i = 1; i <= numNeighbors; i++){
-            // Integer randomNum = ThreadLocalRandom.current().nextInt(lambda);
-            // Create the initial messages ('coupons') for node v containing the node's ID and the desired walk length of lambda + randomNum
             startingCoupons.add(CouponMessageRequest.newBuilder()
                     .setCurrentWalkLength(0).setOriginId(id).setParentId(-1)
                     .setForward(i <= eta).build());
@@ -139,6 +135,9 @@ public class AgentRunner implements Runnable {
                     // Wait until we've received a message from all neighbors from
                     // iteration iter-1
                     if (receivedNeighbors.get(iter-1).size() == neighbors.size()) {
+                        loggingStub.couponLog(CouponLogRequest.newBuilder()
+                                .addAllCoupons(receivedCoupons.get(iter-1))
+                                .setNodeId(id).build());
                         Set<Integer> receivedFromNeighbors = receivedNeighbors.get(iter-1);
                         Queue<CouponMessageRequest> couponsToProcess = receivedCoupons.get(iter-1);
 
@@ -197,7 +196,7 @@ public class AgentRunner implements Runnable {
         List<CouponMessageRequest> coupons = phaseOne();
 
         // Start off the messages
-        if (id == 1) {
+        /*if (id == 1) {
             bfsReceivedMessages.add(BFSMessageRequest.newBuilder()
                     .setOriginId(-1)
                     .setParentId(-1).build());
@@ -233,7 +232,7 @@ public class AgentRunner implements Runnable {
         } catch (Exception ex) {
             Logging.logError("Encountered error in agent " + id + " in main loop.");
             ex.printStackTrace();
-        }
+        }*/
         countdown.countDown();
     }
 

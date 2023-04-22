@@ -12,7 +12,13 @@ service Message {
 }
 
 service Log {
+  rpc CouponLog (CouponLogRequest) returns (StatusReply) {}
   rpc SendLog (MessageLog) returns (StatusReply) {}
+}
+
+message CouponLogRequest {
+  int32 node_id = 1;
+  repeated CouponMessageRequest coupons = 2;
 }
 
 message MessageLog {

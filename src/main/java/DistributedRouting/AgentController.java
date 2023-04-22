@@ -1,8 +1,6 @@
 package DistributedRouting;
 
-import DistributedRouting.grpc.LogGrpc;
-import DistributedRouting.grpc.MessageLog;
-import DistributedRouting.grpc.StatusReply;
+import DistributedRouting.grpc.*;
 import DistributedRouting.objects.RawGraph;
 import DistributedRouting.objects.SampleGraphs;
 import DistributedRouting.util.Constants;
@@ -13,25 +11,26 @@ import io.grpc.InsecureServerCredentials;
 import io.grpc.Server;
 import io.grpc.stub.StreamObserver;
 
-import java.util.Map;
-import java.util.Random;
-import java.util.Scanner;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
+import org.graphstream.graph.Edge;
 import org.graphstream.graph.Graph;
 import org.graphstream.graph.implementations.SingleGraph;
+import org.graphstream.ui.spriteManager.SpriteManager;
 
 public class AgentController {
 
     private static final Lock graphLock = new ReentrantLock();
+    private static HashMap<Integer, Graph> graphMap = new HashMap<>();
+    private static SpriteManager manager;
 
-    public static Server initializeListener(Graph graphVis) throws Exception {
+    public static Server initializeListener() throws Exception {
         Server server = Grpc.newServerBuilderForPort(Constants.MESSAGE_PORT, InsecureServerCredentials.create())
-                .addService(new AgentLoggerImpl(graphVis))
+                .addService(new AgentLoggerImpl())
                 .build()
                 .start();
         Runtime.getRuntime().addShutdownHook(new Thread() {
@@ -88,9 +87,10 @@ public class AgentController {
             random = new Random(Long.valueOf(seed));
         }
 
-        RawGraph graph = SampleGraphs.erdosReyniGraph(5,0.5f, random);
-        Graph graphVis = drawGraph(graph);
-        graphVis.setAttribute("ui.stylesheet", """
+        RawGraph graph = SampleGraphs.erdosReyniGraph(20,0.15f, random);
+        for (int i = 1; i <= 2; i++) {
+            Graph graphVis = drawGraph(graph);
+            graphVis.setAttribute("ui.stylesheet", """
                 edge {
                     size: 2px;
                     fill-mode: dyn-plain;
@@ -100,9 +100,11 @@ public class AgentController {
                 node.terminal {
                     fill-color: blue;
                 }""");
+            graphMap.put(i, graphVis);
+        }
 
         try {
-            initializeListener(graphVis);
+            initializeListener();
         } catch (Exception ex) {
             Logging.logError("Failed to start logging service");
             ex.printStackTrace();
@@ -113,7 +115,7 @@ public class AgentController {
 
         // Initialize Threads for each vertex
         graph = graph.asUndirectedGraph();
-        int lambda = 1;
+        int lambda = 5;
         for (Integer vertex : graph.getVertices()) {
             Thread agent = new Thread(new AgentRunner(vertex, graph.neighborsOf(vertex), countdown, lambda));
             agent.start();
@@ -128,9 +130,7 @@ public class AgentController {
     }
 
     static class AgentLoggerImpl extends LogGrpc.LogImplBase {
-        private Graph graphVis;
-        public AgentLoggerImpl(Graph graphVis) {
-            this.graphVis = graphVis;
+        public AgentLoggerImpl() {
         }
 
         @Override
@@ -138,11 +138,32 @@ public class AgentController {
             String label = GraphUtil.edgeLabel(req.getSendingNode(), req.getReceivingNode());
             try {
                 graphLock.tryLock(500, TimeUnit.MILLISECONDS);
-                graphVis.getEdge(label).setAttribute("ui.color", 1);
+                graphMap.get(1).getEdge(label).setAttribute("ui.color", 1);
             } catch (InterruptedException ex) {
                 Logging.logError("Failed to acquire lock for graph update: " + ex.getMessage());
             } finally {
                 graphLock.unlock();
+            }
+            responseObserver.onNext(StatusReply.newBuilder().setSuccess(true).build());
+            responseObserver.onCompleted();
+        }
+
+        @Override
+        public void couponLog(CouponLogRequest req, StreamObserver<StatusReply> responseObserver) {
+            for (CouponMessageRequest coupon : req.getCouponsList()) {
+                Graph graphVis = graphMap.get(coupon.getOriginId());
+                if (graphVis != null) {
+                    try {
+                        graphLock.tryLock(500, TimeUnit.MILLISECONDS);
+                        String label = GraphUtil.edgeLabel(req.getNodeId(), coupon.getParentId());
+                        Edge edge = graphVis.getEdge(label);
+                        if (edge != null) edge.setAttribute("ui.color", 1);
+                    } catch (InterruptedException ex) {
+                        Logging.logError("Failed to acquire lock for graph update: " + ex.getMessage());
+                    } finally {
+                        graphLock.unlock();
+                    }
+                }
             }
             responseObserver.onNext(StatusReply.newBuilder().setSuccess(true).build());
             responseObserver.onCompleted();
