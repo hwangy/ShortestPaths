@@ -58,7 +58,6 @@ public class AgentController {
             for (Integer dest : entry.getValue()) {
                 String d = dest.toString();
                 String label = GraphUtil.edgeLabel(s,d);
-                Logging.logDebug(label);
                 graph.addEdge(label, s, d);
             }
         }
@@ -88,7 +87,7 @@ public class AgentController {
         }
 
         RawGraph graph = SampleGraphs.erdosReyniGraph(20,0.15f, random);
-        for (int i = 1; i <= 2; i++) {
+        for (int i = 1; i <= 1; i++) {
             Graph graphVis = drawGraph(graph);
             graphVis.setAttribute("ui.stylesheet", """
                 edge {
@@ -99,6 +98,10 @@ public class AgentController {
                 
                 node.terminal {
                     fill-color: blue;
+                }
+                
+                node.bfsComplete {
+                    fill-color: red;
                 }""");
             graphMap.put(i, graphVis);
         }
@@ -131,6 +134,22 @@ public class AgentController {
 
     static class AgentLoggerImpl extends LogGrpc.LogImplBase {
         public AgentLoggerImpl() {
+        }
+
+        @Override
+        public void doneBFSLog(NodeLog log, StreamObserver<StatusReply> responseObserver) {
+            try {
+                graphLock.tryLock(500, TimeUnit.MILLISECONDS);
+                graphMap.get(1).getNode(String.valueOf(log.getNodeId()))
+                        .setAttribute("ui.class", "bfsComplete");
+            } catch (InterruptedException ex) {
+                Logging.logError("Failed to acquire lock for graph update: " + ex.getMessage());
+            } finally {
+                graphLock.unlock();
+            }
+            responseObserver.onNext(StatusReply.newBuilder().setSuccess(true).build());
+            responseObserver.onCompleted();
+
         }
 
         @Override

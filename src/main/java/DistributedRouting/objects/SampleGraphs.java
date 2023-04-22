@@ -19,6 +19,11 @@ public class SampleGraphs {
             2,ImmutableSet.of(3),
             3,ImmutableSet.of(1)));
 
+    public static RawGraph simpleGraphTwo = new RawGraph(Arrays.asList(1,2,3,4,5), ImmutableMap.of(
+            1, ImmutableSet.of(2,3),
+            3,ImmutableSet.of(4,5),
+            2,ImmutableSet.of(4)));
+
     public static RawGraph erdosReyniGraph(int n, float p, Random random) {
         List<Integer> vertices = IntStream.rangeClosed(1, n).boxed().toList();
         HashMap<Integer, Set<Integer>> edges = new HashMap<>();

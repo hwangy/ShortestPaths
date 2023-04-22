@@ -8,12 +8,22 @@ package grpc;
 
 service Message {
   rpc RunBFS (BFSMessageRequest) returns (BFSMessageReply) {}
+  rpc CompleteBFS (BFSDoneRequest) returns (BFSMessageReply) {}
   rpc SendCoupon (CouponMessageRequest) returns (CouponMessageReply) {}
 }
 
 service Log {
   rpc CouponLog (CouponLogRequest) returns (StatusReply) {}
   rpc SendLog (MessageLog) returns (StatusReply) {}
+  rpc DoneBFSLog (NodeLog) returns (StatusReply) {}
+}
+
+message BFSDoneRequest {
+  int32 node_id = 1;
+}
+
+message NodeLog {
+  int32 node_id = 1;
 }
 
 message CouponLogRequest {
