@@ -116,7 +116,6 @@ public class AgentRunner implements Runnable {
 
         List<CouponMessageRequest> coupons = new ArrayList<>();
         int numNeighbors = neighbors.size();
-        List<Integer> neighborList = neighbors.stream().toList();
 
         Queue<CouponMessageRequest> startingCoupons = new LinkedList<>();
         for (int i = 1; i <= numNeighbors; i++){
@@ -129,74 +128,118 @@ public class AgentRunner implements Runnable {
 
         // Iterate from 1 to lambda + 1. The final round is used for bookkeeping
         for (int iter = 1; iter <= lambda + 1; iter++) {
-            try {
-                while (true) {
-                    Thread.sleep(1);
-                    // Wait until we've received a message from all neighbors from
-                    // iteration iter-1
-                    if (receivedNeighbors.get(iter-1).size() == neighbors.size()) {
-                        loggingStub.couponLog(CouponLogRequest.newBuilder()
-                                .addAllCoupons(receivedCoupons.get(iter-1))
-                                .setNodeId(id).build());
-                        Set<Integer> receivedFromNeighbors = receivedNeighbors.get(iter-1);
-                        Queue<CouponMessageRequest> couponsToProcess = receivedCoupons.get(iter-1);
-
-                        Thread.sleep(1000);
-                        while (couponsToProcess.size() > 0) {
-                            CouponMessageRequest req = couponsToProcess.poll();
-
-                            if (req.getForward()) {
-                                if (req.getCurrentWalkLength() < lambda) {
-                                    // Pick a neighbor of the vertex uniformly at random
-                                    Integer randomNeighbor = neighborList.get(
-                                            ThreadLocalRandom.current().nextInt(neighbors.size()));
-                                    channelMap.get(randomNeighbor).sendCoupon(
-                                            CouponMessageRequest.newBuilder(req)
-                                                    .setParentId(id)
-                                                    .setCurrentWalkLength(req.getCurrentWalkLength() + 1).build());
-
-                                    // This node will have received a message in this iteration
-                                    receivedFromNeighbors.remove(randomNeighbor);
-                                } else {
-                                    coupons.add(req);
-                                }
-                            }
-                        }
-
-                        if (iter == lambda + 1) break;
-                        // Now forward terminal coupons to the rest of the neighbors which
-                        // have not received a message
-                        for (Integer others : receivedFromNeighbors) {
-                            channelMap.get(others).sendCoupon(CouponMessageRequest.newBuilder()
-                                    .setCurrentWalkLength(iter)
-                                    .setParentId(id).setForward(false).build());
-                        }
-                        break;
-                    }
-                }
-            } catch (InterruptedException ex) {
-                Logging.logError("Encountered exception in thread " + id + ": " + ex.getMessage());
-            }
+            coupons.addAll(waitForCouponsAndSend(iter, lambda, coupons));
        }
        return coupons;
     }
 
-    /**
-     * Main loop of AgentRunner. This method regularly checks if a message has been
-     * received and, if it has, sends off another message to all of its neighbors
-     * except the one from which the message was received.
-     */
-    public void run() {
-        initializeConnections();
-        bfsAlreadyVisited = false;
+    public List<CouponMessageRequest> waitForCouponsAndSend(int iter, int lambda, List<CouponMessageRequest> coupons) {
+        List<Integer> neighborList = neighbors.stream().toList();
+        try {
+            while (true) {
+                Thread.sleep(1);
+                // Wait until we've received a message from all neighbors from
+                // iteration iter-1
+                if (receivedNeighbors.get(iter-1).size() == neighbors.size()) {
+                    loggingStub.couponLog(CouponLogRequest.newBuilder()
+                            .addAllCoupons(receivedCoupons.get(iter-1))
+                            .setNodeId(id).build());
+                    Set<Integer> receivedFromNeighbors = receivedNeighbors.get(iter-1);
+                    Queue<CouponMessageRequest> couponsToProcess = receivedCoupons.get(iter-1);
 
-        // how to set lambda / should we put it as a parameter?
-        Integer lambda = 1;
+                    Thread.sleep(1000);
+                    while (couponsToProcess.size() > 0) {
+                        CouponMessageRequest req = couponsToProcess.poll();
 
-        List<CouponMessageRequest> coupons = phaseOne();
+                        if (req.getForward()) {
+                            if (req.getCurrentWalkLength() < lambda) {
+                                // Pick a neighbor of the vertex uniformly at random
+                                Integer randomNeighbor = neighborList.get(
+                                        ThreadLocalRandom.current().nextInt(neighbors.size()));
+                                channelMap.get(randomNeighbor).sendCoupon(
+                                        CouponMessageRequest.newBuilder(req)
+                                                .setParentId(id)
+                                                .setCurrentWalkLength(req.getCurrentWalkLength() + 1).build());
 
-        // Start off the messages
-        /*if (id == 1) {
+                                // This node will have received a message in this iteration
+                                receivedFromNeighbors.remove(randomNeighbor);
+                            } else {
+                                coupons.add(req);
+                            }
+                        }
+                    }
+
+                    if (iter == lambda + 1) break;
+                    // Now forward terminal coupons to the rest of the neighbors which
+                    // have not received a message
+                    for (Integer others : receivedFromNeighbors) {
+                        channelMap.get(others).sendCoupon(CouponMessageRequest.newBuilder()
+                                .setCurrentWalkLength(iter)
+                                .setParentId(id).setForward(false).build());
+                    }
+                    break;
+                }
+            }
+        } catch (InterruptedException ex) {
+            Logging.logError("Encountered exception in thread " + id + ": " + ex.getMessage());
+        }
+
+        return coupons;
+
+    }
+
+    public void sendMoreCoupons(int vertex, int eta, int lambda) {
+        List<CouponMessageRequest> coupons = sendMoreCouponsPart1(vertex, eta, lambda);
+        sendMoreCouponsPart2(vertex, eta, lambda, coupons);
+    }
+
+    public List<CouponMessageRequest>  sendMoreCouponsPart1(int vertex, int eta, int lambda) {
+
+        List<CouponMessageRequest> coupons = new ArrayList<>();
+
+        Queue<CouponMessageRequest> newCoupons = new LinkedList<CouponMessageRequest>();
+        List<Integer> neighborList = neighbors.stream().toList();
+        for (int j = 1; j <= eta; j++) {
+            newCoupons.add(CouponMessageRequest.newBuilder()
+                    .setCurrentWalkLength(0).setOriginId(id).setParentId(-1)
+                    .setForward(true).build());
+        }
+        
+        receivedCoupons.put(0, newCoupons);
+        receivedNeighbors.put(0, new HashSet<>(neighbors));
+
+        // Check if this is ok or need to send c(u, v) and reconstruct that many coupons again. 
+        // Can add this to design notebook as well.
+        for (int iter = 1; iter <= lambda; iter++) {
+            coupons.addAll(waitForCouponsAndSend(iter, lambda, coupons));
+        }
+
+        return coupons;
+    }
+
+    public void sendMoreCouponsPart2(int vertex, int eta, int lambda, List<CouponMessageRequest> coupons) {
+        List<Integer> sourceNodes = new LinkedList<Integer>();
+        List<Integer> neighborList = neighbors.stream().toList();
+        
+        for (int i = 0; i <= lambda - 1; i++) {
+            for (CouponMessageRequest coupon : coupons) {
+                double randomNum = Math.random();
+                if (randomNum <= 1/(lambda - i)) {
+                    sourceNodes.add(coupon.getOriginId());
+                } else {
+                    // Each node picks a neighbor correspondingly: does this mean uniformly?
+                    Integer randomNeighbor = neighborList.get(
+                        ThreadLocalRandom.current().nextInt(neighbors.size()));
+                    channelMap.get(randomNeighbor).sendCoupon(coupon);
+                }
+            }
+        }       
+    }
+
+    public void bfsTree() {
+
+         // Start off the messages
+         if (id == 1) {
             bfsReceivedMessages.add(BFSMessageRequest.newBuilder()
                     .setOriginId(-1)
                     .setParentId(-1).build());
@@ -232,8 +275,63 @@ public class AgentRunner implements Runnable {
         } catch (Exception ex) {
             Logging.logError("Encountered error in agent " + id + " in main loop.");
             ex.printStackTrace();
-        }*/
+        }
         countdown.countDown();
+    }
+
+    public Integer sampleCoupon(Integer startingNode) {
+        bfsTree();
+        // Rest of sample coupon here
+
+        return 1;
+    }
+
+    public Integer phaseTwo() {
+        Integer destinationNode = -1;
+
+        // Source node creates token and set of connectors
+        if (id == 1) {
+            CouponMessageRequest token = CouponMessageRequest.newBuilder()
+                .setCurrentWalkLength(0).setOriginId(id).setParentId(-1)
+                .setForward(true).build();
+            List<Integer> connectors = new LinkedList<Integer>();
+            // Initially C = {s} where s is the source node
+            connectors.add(id);
+        }
+
+        // To be removed (just to make sure all function dependencies are working for now.)
+        sampleCoupon(id);
+
+
+       // while(the length of the walk completed is at most l - 2 lambda) {
+            // if currently holding the token:
+                // call sampleCoupon(id); --> Call this 2x? (Line 5 and Line 8 of Algo 3?)
+                // if v' = null:
+                    //sendMoreCoupons(id, eta, lambda)
+                    // call Integer v_prime = sampleCoupon(id);
+
+            // v sends the token to v'
+            // v' deletes C so that C will not be sampled again
+            // connectors.add(v_prime);
+       // }
+
+        return destinationNode;
+    }
+
+    /**
+     * Main loop of AgentRunner. This method regularly checks if a message has been
+     * received and, if it has, sends off another message to all of its neighbors
+     * except the one from which the message was received.
+     */
+    public void run() {
+        initializeConnections();
+        bfsAlreadyVisited = false;
+
+        // how to set lambda / should we put it as a parameter?
+        Integer lambda = 1;
+
+        List<CouponMessageRequest> coupons = phaseOne();
+        Integer destinationNode = phaseTwo();
     }
 
     /**
