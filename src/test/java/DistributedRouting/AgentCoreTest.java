@@ -29,7 +29,7 @@ public class AgentCoreTest {
     @Test
     void testPickFirstWithWeightsFromLengthTwo() {
         ThreadLocalRandom random = Mockito.mock(ThreadLocalRandom.class, withSettings().withoutAnnotations());
-        when(random.nextInt(anyInt(), anyInt())).thenReturn(1);
+        when(random.nextInt(anyInt(), anyInt())).thenReturn(2);
         AgentCore core = new AgentCore(random);
 
         List<CouponMessageRequest> testList = TestObjects.twoCouponListNoWeights(1, 2);

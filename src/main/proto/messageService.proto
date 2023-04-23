@@ -30,8 +30,10 @@ message BFSChildRequest {
 }
 
 enum Phase {
-  BFS = 0;
-  SAMPLE = 1;
+  DISTRIBUTE = 0;
+  BFS = 1;
+  SAMPLE_WAIT = 2;
+  SAMPLE = 3;
 }
 
 message NodeLog {

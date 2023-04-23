@@ -33,9 +33,9 @@ public class AgentCore {
             int randChoice = random.nextInt(1, cumSum+1);
 
             if (randChoice <= ownCoupons.size()) {
-                // Case: Coupon from current vertex is selected. Return the
-                // first such coupon (doesn't matter which) and write this node's ID on the coupon
-                builder = CouponMessageRequest.newBuilder(ownCoupons.remove(0)).setOriginId(id);
+                // Case: Coupon from current vertex is selected. Return the corresponding coupon
+                // and write this node's ID on the coupon
+                builder = CouponMessageRequest.newBuilder(ownCoupons.remove(randChoice - 1)).setOriginId(id);
             } else {
                 // Case: Coupon from a descendent in the BFS tree is selected
                 // Pick the coupon based off of `randChoice`

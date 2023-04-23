@@ -9,6 +9,7 @@ import io.grpc.stub.StreamObserver;
 import org.checkerframework.checker.units.qual.A;
 import scala.Int;
 
+import javax.sound.midi.Receiver;
 import java.io.IOException;
 import java.util.*;
 import java.util.concurrent.CountDownLatch;
@@ -125,7 +126,7 @@ public class AgentRunner implements Runnable {
     }
 
     public Map<Integer, List<CouponMessageRequest>> phaseOne(){
-        Integer eta = 1;
+        Integer eta = 2;
 
         Map<Integer, List<CouponMessageRequest>> coupons = new HashMap<>();
         int numNeighbors = neighbors.size();
@@ -143,6 +144,10 @@ public class AgentRunner implements Runnable {
         for (int iter = 1; iter <= lambda + 1; iter++) {
             waitForCouponsAndSend(iter, lambda, coupons);
         }
+        // Indicate this node has finished distributing its coupons
+        loggingStub.sendNodeLog(NodeLog.newBuilder().setNodeId(id).setPhase(Phase.DISTRIBUTE).build());
+
+        // Clear all previously received coupons
         receivedCoupons.clear();
         receivedNeighbors.clear();
        return coupons;
@@ -162,7 +167,7 @@ public class AgentRunner implements Runnable {
                     Set<Integer> receivedFromNeighbors = receivedNeighbors.get(iter-1);
                     Queue<CouponMessageRequest> couponsToProcess = receivedCoupons.get(iter-1);
 
-                    Thread.sleep(1000);
+                    Thread.sleep(100);
                     while (couponsToProcess.size() > 0) {
                         CouponMessageRequest req = couponsToProcess.poll();
 
@@ -212,7 +217,6 @@ public class AgentRunner implements Runnable {
         Map<Integer, List<CouponMessageRequest>> coupons = new HashMap<>();
 
         Queue<CouponMessageRequest> newCoupons = new LinkedList<CouponMessageRequest>();
-        List<Integer> neighborList = neighbors.stream().toList();
         for (int j = 1; j <= eta; j++) {
             newCoupons.add(CouponMessageRequest.newBuilder()
                     .setCurrentWalkLength(0).setOriginId(id).setParentId(-1)
@@ -271,7 +275,6 @@ public class AgentRunner implements Runnable {
                 Thread.sleep(1);
 
                 if (bfsDoneCount == neighbors.size() && bfsReceivedMessages.size() == 0) {
-                    Logging.logDebug("node " + id + " done");
                     loggingStub.sendNodeLog(NodeLog.newBuilder().setNodeId(id).setPhase(Phase.BFS).build());
                     if (bfsParent > 0) {
                         channelMap.get(bfsParent).completeBFS(
@@ -279,7 +282,7 @@ public class AgentRunner implements Runnable {
                     }
                     break;
                 } else if (bfsReceivedMessages.peek() != null) {
-                    Thread.sleep(500);
+                    Thread.sleep(100);
                     BFSMessageRequest msg = bfsReceivedMessages.poll();
 
                     if (!bfsAlreadyVisited) {
@@ -291,9 +294,9 @@ public class AgentRunner implements Runnable {
                         bfsLevel = msg.getLevel();
 
                         // Set as child
-                        /*if (bfsParent > 0) {
+                        if (bfsParent > 0) {
                             channelMap.get(bfsParent).setChild(BFSChildRequest.newBuilder().setNodeId(id).build());
-                        }*/
+                        }
 
                         // Send message to all neighbors, except the one who sent the message
                         for (Integer vertex : neighbors) {
@@ -327,35 +330,32 @@ public class AgentRunner implements Runnable {
     public Integer sampleCoupon(Map<Integer, List<CouponMessageRequest>> coupons) {
         bfsTree(1);
 
-        for (int d = numVertices; d > 0; d--) {
-            // Vertices at depth d sends coupons up the chain.
-            if (bfsLevel == d) {
-                // Pick random coupon to send up a level
-                List<CouponMessageRequest> originCoupons = coupons.getOrDefault(bfsOrigin, new ArrayList<>());
-                List<CouponMessageRequest> fromChildren = (List) receivedCoupons.getOrDefault(d, new LinkedList<>());
-                CouponMessageRequest toForward = core.pickWithWeights(id, originCoupons, fromChildren);
-
-                if (toForward != null) {
-                    toForward = CouponMessageRequest.newBuilder().setOriginId(id).setWeight(0).build();
-                }
-                channelMap.get(bfsParent).sendCoupon(CouponMessageRequest.newBuilder(toForward)
-                        .setCurrentWalkLength(d-1).build());
-
-            } else if (bfsLevel == d-1) {
-                // Wait for all children's messages
-                while (receivedCoupons.get(d).size() < treeChildren.size()) {
-                    sleep(10);
-                }
-                loggingStub.sendNodeLog(NodeLog.newBuilder().setNodeId(id).setPhase(Phase.SAMPLE).build());
-                sleep(1000);
+        // If there are descendents wait for all children's messages
+        if (treeChildren.size() > 0) {
+            loggingStub.sendNodeLog(NodeLog.newBuilder().setNodeId(id).setPhase(Phase.SAMPLE_WAIT).build());
+            while (receivedCoupons.get(bfsLevel) == null || receivedCoupons.get(bfsLevel).size() < treeChildren.size()) {
+                sleep(10);
             }
-        }
-        // If this is not the origin and the BFS parent exists, send the
-        // coupons corresponding to origin back up the BFS tree
-        if (id != 1 && bfsOrigin != null && bfsParent != null) {
-
+            loggingStub.sendNodeLog(NodeLog.newBuilder().setNodeId(id).setPhase(Phase.SAMPLE).build());
+            sleep(250);
         }
 
+        if (bfsLevel == 0) {
+            List<CouponMessageRequest> selectFrom = (List) receivedCoupons.get(bfsLevel);
+            int randCoupon = ThreadLocalRandom.current().nextInt(0, selectFrom.size());
+            return selectFrom.get(randCoupon).getOriginId();
+        }
+
+        // Pick random coupon to send up a level
+        List<CouponMessageRequest> originCoupons = coupons.getOrDefault(bfsOrigin, new ArrayList<>());
+        List<CouponMessageRequest> fromChildren = (List) receivedCoupons.getOrDefault(bfsLevel, new LinkedList<>());
+        CouponMessageRequest toForward = core.pickWithWeights(id, originCoupons, fromChildren);
+
+        if (toForward == null) {
+            toForward = CouponMessageRequest.newBuilder().setOriginId(id).setWeight(0).build();
+        }
+        channelMap.get(bfsParent).sendCoupon(CouponMessageRequest.newBuilder(toForward)
+                .setCurrentWalkLength(bfsLevel - 1).build());
         return 1;
     }
 
@@ -373,8 +373,8 @@ public class AgentRunner implements Runnable {
         }
 
         // To be removed (just to make sure all function dependencies are working for now.)
-        sampleCoupon(coupons);
-
+        int dest = sampleCoupon(coupons);
+        if (id == 1) Logging.logInfo("Node " + id + " sampled " + dest);
 
        // while(the length of the walk completed is at most l - 2 lambda) {
             // if currently holding the token:
@@ -403,9 +403,8 @@ public class AgentRunner implements Runnable {
         // how to set lambda / should we put it as a parameter?
         Integer lambda = 1;
 
-        bfsTree(1);
         Map<Integer, List<CouponMessageRequest>> coupons = phaseOne();
-        //Integer destinationNode = phaseTwo(coupons);
+        Integer destinationNode = phaseTwo(coupons);
     }
 
     /**
@@ -449,8 +448,8 @@ public class AgentRunner implements Runnable {
 
         @Override
         public void sendCoupon(CouponMessageRequest req, StreamObserver<CouponMessageReply> responseObserver) {
-            receivedCoupons.get(req.getCurrentWalkLength()).add(req);
-            receivedNeighbors.get(req.getCurrentWalkLength()).add(req.getParentId());
+            receivedCoupons.computeIfAbsent(req.getCurrentWalkLength(), k -> new LinkedList<>()).add(req);
+            receivedNeighbors.computeIfAbsent(req.getCurrentWalkLength(), k -> new HashSet<>()).add(req.getParentId());
             responseObserver.onNext(GrpcUtil.genSuccessfulReplyCoupon());
             responseObserver.onCompleted();
         }

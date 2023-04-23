@@ -102,12 +102,20 @@ public class AgentController {
                     fill-color: blue;
                 }
                 
-                node.bfsComplete {
-                    fill-color: red;
+                node.distribute {
+                    fill-color: green;
                 }
                 
-                node.SampleComplete {
-                    fill-color: green;
+                node.bfs {
+                    fill-color: orange;
+                }
+                
+                node.wait {
+                    fill-color: purple;
+                }
+                
+                node.sample {
+                    fill-color: red;
                 }""");
             graphMap.put(i, graphVis);
         }
@@ -146,12 +154,14 @@ public class AgentController {
         public void sendNodeLog(NodeLog log, StreamObserver<StatusReply> responseObserver) {
             try {
                 graphLock.tryLock(500, TimeUnit.MILLISECONDS);
-                Node vertex = graphMap.get(1).getNode(String.valueOf(log.getNodeId()));
-                switch (log.getPhaseValue()) {
-                    case Phase.BFS_VALUE -> vertex.setAttribute("bfsComplete");
-                    case Phase.SAMPLE_VALUE -> vertex.setAttribute("sampleComplete");
-                    default -> Logging.logError("Unknown log id from " + log.getNodeId());
-                }
+                String nodeClass = switch (log.getPhaseValue()) {
+                    case Phase.DISTRIBUTE_VALUE -> "distribute";
+                    case Phase.BFS_VALUE -> "bfs";
+                    case Phase.SAMPLE_WAIT_VALUE -> "wait";
+                    case Phase.SAMPLE_VALUE -> "sample";
+                    default -> "";
+                };
+                graphMap.get(1).getNode(String.valueOf(log.getNodeId())).setAttribute("ui.class", nodeClass);
             } catch (InterruptedException ex) {
                 Logging.logError("Failed to acquire lock for graph update: " + ex.getMessage());
             } finally {
