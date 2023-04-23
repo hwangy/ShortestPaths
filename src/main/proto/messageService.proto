@@ -8,6 +8,9 @@ package grpc;
 
 service Message {
   rpc RunBFS (BFSMessageRequest) returns (BFSMessageReply) {}
+  // A child sends this to its parent to indicate that it is the child
+  // of the parent in the BFS tree
+  rpc SetChild (BFSChildRequest) returns (BFSMessageReply) {}
   rpc CompleteBFS (BFSDoneRequest) returns (BFSMessageReply) {}
   rpc SendCoupon (CouponMessageRequest) returns (CouponMessageReply) {}
 }
@@ -15,15 +18,25 @@ service Message {
 service Log {
   rpc CouponLog (CouponLogRequest) returns (StatusReply) {}
   rpc SendLog (MessageLog) returns (StatusReply) {}
-  rpc DoneBFSLog (NodeLog) returns (StatusReply) {}
+  rpc SendNodeLog (NodeLog) returns (StatusReply) {}
 }
 
 message BFSDoneRequest {
   int32 node_id = 1;
 }
 
+message BFSChildRequest {
+  int32 node_id = 1;
+}
+
+enum Phase {
+  BFS = 0;
+  SAMPLE = 1;
+}
+
 message NodeLog {
   int32 node_id = 1;
+  Phase phase = 2;
 }
 
 message CouponLogRequest {
@@ -51,6 +64,7 @@ message StatusReply {
 message BFSMessageRequest {
   int32 origin_id = 1;
   int32 parent_id = 2;
+  int32 level = 3;
 }
 
 message BFSMessageReply {
@@ -62,6 +76,8 @@ message CouponMessageRequest {
   int32 origin_id = 2;
   int32 parent_id = 3;
   int32 current_walk_length = 4;
+  // Used for `SAMPLE_COUPON`
+  int32 weight = 5;
 }
 
 message CouponMessageReply {

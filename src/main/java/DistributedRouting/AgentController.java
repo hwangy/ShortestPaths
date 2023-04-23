@@ -19,6 +19,7 @@ import java.util.concurrent.locks.ReentrantLock;
 
 import org.graphstream.graph.Edge;
 import org.graphstream.graph.Graph;
+import org.graphstream.graph.Node;
 import org.graphstream.graph.implementations.SingleGraph;
 import org.graphstream.ui.spriteManager.SpriteManager;
 
@@ -86,7 +87,8 @@ public class AgentController {
             random = new Random(Long.valueOf(seed));
         }
 
-        RawGraph graph = SampleGraphs.erdosReyniGraph(20,0.15f, random);
+        int numVertices = 20;
+        RawGraph graph = SampleGraphs.erdosReyniGraph(numVertices,0.15f, random);
         for (int i = 1; i <= 1; i++) {
             Graph graphVis = drawGraph(graph);
             graphVis.setAttribute("ui.stylesheet", """
@@ -102,6 +104,10 @@ public class AgentController {
                 
                 node.bfsComplete {
                     fill-color: red;
+                }
+                
+                node.SampleComplete {
+                    fill-color: green;
                 }""");
             graphMap.put(i, graphVis);
         }
@@ -120,7 +126,7 @@ public class AgentController {
         graph = graph.asUndirectedGraph();
         int lambda = 5;
         for (Integer vertex : graph.getVertices()) {
-            Thread agent = new Thread(new AgentRunner(vertex, graph.neighborsOf(vertex), countdown, lambda));
+            Thread agent = new Thread(new AgentRunner(numVertices, vertex, graph.neighborsOf(vertex), countdown, lambda));
             agent.start();
         }
 
@@ -137,11 +143,15 @@ public class AgentController {
         }
 
         @Override
-        public void doneBFSLog(NodeLog log, StreamObserver<StatusReply> responseObserver) {
+        public void sendNodeLog(NodeLog log, StreamObserver<StatusReply> responseObserver) {
             try {
                 graphLock.tryLock(500, TimeUnit.MILLISECONDS);
-                graphMap.get(1).getNode(String.valueOf(log.getNodeId()))
-                        .setAttribute("ui.class", "bfsComplete");
+                Node vertex = graphMap.get(1).getNode(String.valueOf(log.getNodeId()));
+                switch (log.getPhaseValue()) {
+                    case Phase.BFS_VALUE -> vertex.setAttribute("bfsComplete");
+                    case Phase.SAMPLE_VALUE -> vertex.setAttribute("sampleComplete");
+                    default -> Logging.logError("Unknown log id from " + log.getNodeId());
+                }
             } catch (InterruptedException ex) {
                 Logging.logError("Failed to acquire lock for graph update: " + ex.getMessage());
             } finally {

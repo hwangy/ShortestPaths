@@ -28,16 +28,21 @@ public class AgentRunner implements Runnable {
     private LogGrpc.LogBlockingStub loggingStub;
     private Map<Integer, MessageGrpc.MessageBlockingStub> channelMap;
     private Set<Integer> neighbors;
+    private Set<Integer> treeChildren;
     private final int port;
     private final int id;
 
     private final int lambda;
 
+    private final int numVertices;
     private Integer bfsParent = null;
     private Integer bfsOrigin = null;
     private Boolean bfsAlreadyVisited;
 
     private Integer bfsDoneCount = 0;
+    private Integer bfsLevel;
+
+    private AgentCore core;
 
     private CountDownLatch countdown;
 
@@ -55,13 +60,24 @@ public class AgentRunner implements Runnable {
         return server;
     }
 
-    public AgentRunner(Integer id, Set<Integer> neighbors, CountDownLatch countdown, int lambda) {
+    private static void sleep(int millis) {
+        try {
+            Thread.sleep(millis);
+        } catch (InterruptedException ex) {
+            ex.printStackTrace();
+        }
+    }
+
+    public AgentRunner(Integer numVertices, Integer id, Set<Integer> neighbors, CountDownLatch countdown, int lambda) {
         port = Constants.MESSAGE_PORT + id;
         this.id = id;
         this.neighbors = neighbors;
         this.countdown = countdown;
         this.lambda = lambda;
+        this.numVertices = numVertices;
+        this.core = new AgentCore();
 
+        treeChildren = new HashSet<>();
         bfsReceivedMessages = new LinkedList<>();
         receivedCoupons = new HashMap<>();
         receivedNeighbors = new HashMap<>();
@@ -99,11 +115,7 @@ public class AgentRunner implements Runnable {
                     .build();
             channelMap.put(neighbor, MessageGrpc.newBlockingStub(channel));
             while (true) {
-                try {
-                    Thread.sleep(100);
-                } catch (InterruptedException ex) {
-                    ex.printStackTrace();
-                }
+                sleep(100);
                 ConnectivityState state = channel.getState(true);
                 if (state.equals(ConnectivityState.READY)) {
                     break;
@@ -113,7 +125,6 @@ public class AgentRunner implements Runnable {
     }
 
     public Map<Integer, List<CouponMessageRequest>> phaseOne(){
-
         Integer eta = 1;
 
         Map<Integer, List<CouponMessageRequest>> coupons = new HashMap<>();
@@ -131,7 +142,9 @@ public class AgentRunner implements Runnable {
         // Iterate from 1 to lambda + 1. The final round is used for bookkeeping
         for (int iter = 1; iter <= lambda + 1; iter++) {
             waitForCouponsAndSend(iter, lambda, coupons);
-       }
+        }
+        receivedCoupons.clear();
+        receivedNeighbors.clear();
        return coupons;
     }
 
@@ -242,14 +255,15 @@ public class AgentRunner implements Runnable {
     /**
      * Receive and forward BFS messages.
      */
-    public void bfsTree() {
+    public void bfsTree(int root) {
         bfsDoneCount = 0;
 
         // Start off the messages
-        if (id == 1) {
-             bfsReceivedMessages.add(BFSMessageRequest.newBuilder()
-                     .setOriginId(1)
-                     .setParentId(-1).build());
+        if (id == root) {
+            bfsReceivedMessages.add(BFSMessageRequest.newBuilder()
+                    .setOriginId(root)
+                    .setLevel(0)
+                    .setParentId(-1).build());
         }
 
         try {
@@ -257,28 +271,36 @@ public class AgentRunner implements Runnable {
                 Thread.sleep(1);
 
                 if (bfsDoneCount == neighbors.size() && bfsReceivedMessages.size() == 0) {
-                    loggingStub.doneBFSLog(NodeLog.newBuilder().setNodeId(id).build());
+                    Logging.logDebug("node " + id + " done");
+                    loggingStub.sendNodeLog(NodeLog.newBuilder().setNodeId(id).setPhase(Phase.BFS).build());
                     if (bfsParent > 0) {
                         channelMap.get(bfsParent).completeBFS(
                                 BFSDoneRequest.newBuilder().setNodeId(id).build());
                     }
                     break;
                 } else if (bfsReceivedMessages.peek() != null) {
-                    Thread.sleep(1000);
+                    Thread.sleep(500);
                     BFSMessageRequest msg = bfsReceivedMessages.poll();
 
                     if (!bfsAlreadyVisited) {
-                        if (id != 1) bfsDoneCount++;
+                        if (id != root) bfsDoneCount++;
 
                         bfsAlreadyVisited = true;
                         bfsOrigin = msg.getOriginId();
                         bfsParent = msg.getParentId();
+                        bfsLevel = msg.getLevel();
+
+                        // Set as child
+                        /*if (bfsParent > 0) {
+                            channelMap.get(bfsParent).setChild(BFSChildRequest.newBuilder().setNodeId(id).build());
+                        }*/
 
                         // Send message to all neighbors, except the one who sent the message
                         for (Integer vertex : neighbors) {
                             if (vertex != msg.getParentId()) {
                                 BFSMessageReply reply = channelMap.get(vertex).runBFS(BFSMessageRequest.newBuilder()
                                         .setOriginId(msg.getOriginId())
+                                        .setLevel(msg.getLevel() + 1)
                                         .setParentId(id).build());
                                 if (!reply.getSuccess()) {
                                     Logging.logService("Received failure from " + vertex);
@@ -303,8 +325,31 @@ public class AgentRunner implements Runnable {
     }
 
     public Integer sampleCoupon(Map<Integer, List<CouponMessageRequest>> coupons) {
-        bfsTree();
+        bfsTree(1);
 
+        for (int d = numVertices; d > 0; d--) {
+            // Vertices at depth d sends coupons up the chain.
+            if (bfsLevel == d) {
+                // Pick random coupon to send up a level
+                List<CouponMessageRequest> originCoupons = coupons.getOrDefault(bfsOrigin, new ArrayList<>());
+                List<CouponMessageRequest> fromChildren = (List) receivedCoupons.getOrDefault(d, new LinkedList<>());
+                CouponMessageRequest toForward = core.pickWithWeights(id, originCoupons, fromChildren);
+
+                if (toForward != null) {
+                    toForward = CouponMessageRequest.newBuilder().setOriginId(id).setWeight(0).build();
+                }
+                channelMap.get(bfsParent).sendCoupon(CouponMessageRequest.newBuilder(toForward)
+                        .setCurrentWalkLength(d-1).build());
+
+            } else if (bfsLevel == d-1) {
+                // Wait for all children's messages
+                while (receivedCoupons.get(d).size() < treeChildren.size()) {
+                    sleep(10);
+                }
+                loggingStub.sendNodeLog(NodeLog.newBuilder().setNodeId(id).setPhase(Phase.SAMPLE).build());
+                sleep(1000);
+            }
+        }
         // If this is not the origin and the BFS parent exists, send the
         // coupons corresponding to origin back up the BFS tree
         if (id != 1 && bfsOrigin != null && bfsParent != null) {
@@ -358,10 +403,9 @@ public class AgentRunner implements Runnable {
         // how to set lambda / should we put it as a parameter?
         Integer lambda = 1;
 
-        bfsTree();
-
-        /*Map<Integer, List<CouponMessageRequest>> coupons = phaseOne();
-        Integer destinationNode = phaseTwo(coupons);*/
+        bfsTree(1);
+        Map<Integer, List<CouponMessageRequest>> coupons = phaseOne();
+        //Integer destinationNode = phaseTwo(coupons);
     }
 
     /**
@@ -385,6 +429,13 @@ public class AgentRunner implements Runnable {
         @Override
         public void runBFS(BFSMessageRequest req, StreamObserver<BFSMessageReply> responseObserver) {
             bfsRequestQueue.add(req);
+            responseObserver.onNext(GrpcUtil.genSuccessfulReplyBFS());
+            responseObserver.onCompleted();
+        }
+
+        @Override
+        public void setChild(BFSChildRequest req, StreamObserver<BFSMessageReply> responseObserver) {
+            treeChildren.add(req.getNodeId());
             responseObserver.onNext(GrpcUtil.genSuccessfulReplyBFS());
             responseObserver.onCompleted();
         }
