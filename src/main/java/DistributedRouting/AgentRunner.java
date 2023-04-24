@@ -383,6 +383,12 @@ public class AgentRunner implements Runnable {
         int maxLength = 2;
         for (int l = 0; l < maxLength; l++) {
             CouponMessageRequest next = sampleCoupon(start, coupons);
+            
+            if (next != null) {
+                sendMoreCoupons(id, eta, lambda);
+                next = sampleCoupon(id, coupons);
+            }
+            
             if (id == start) {
                 Logging.logInfo("Node " + id + " sampled " + next.getOriginId());
             } else {
@@ -407,18 +413,6 @@ public class AgentRunner implements Runnable {
 
             loggingStub.sendNodeLog(NodeLog.newBuilder().setNodeId(id).setPhase(Phase.SYNC).build());
         }
-
-       // while(the length of the walk completed is at most l - 2 lambda) {
-            // if currently holding the token:
-                // call sampleCoupon(id); --> Call this 2x? (Line 5 and Line 8 of Algo 3?)
-                // if v' = null:
-                    //sendMoreCoupons(id, eta, lambda)
-                    // call Integer v_prime = sampleCoupon(id);
-
-            // v sends the token to v'
-            // v' deletes C so that C will not be sampled again
-            // connectors.add(v_prime);
-       // }
 
         return destinationNode;
     }
