@@ -116,7 +116,12 @@ public class AgentController {
                 
                 node.sample {
                     fill-color: red;
-                }""");
+                }
+                
+                node.sync {
+                    fill-color: black;
+                }
+                """);
             graphMap.put(i, graphVis);
         }
 
@@ -159,6 +164,7 @@ public class AgentController {
                     case Phase.BFS_VALUE -> "bfs";
                     case Phase.SAMPLE_WAIT_VALUE -> "wait";
                     case Phase.SAMPLE_VALUE -> "sample";
+                    case Phase.SYNC_VALUE -> "sync";
                     default -> "";
                 };
                 graphMap.get(1).getNode(String.valueOf(log.getNodeId())).setAttribute("ui.class", nodeClass);

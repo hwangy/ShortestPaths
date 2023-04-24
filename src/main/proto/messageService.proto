@@ -34,6 +34,7 @@ enum Phase {
   BFS = 1;
   SAMPLE_WAIT = 2;
   SAMPLE = 3;
+  SYNC = 4;
 }
 
 message NodeLog {
