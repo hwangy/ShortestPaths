@@ -69,6 +69,14 @@ public class AgentRunner implements Runnable {
         }
     }
 
+    /**
+     * Constructor for AgentRunner, which initializes all of the variable and the listener.
+     * @param numVertices the number of vertices in the graph
+     * @param id The id of the node (the machine being run)
+     * @param neighbors The neighbors of the node
+     * @param countdown 
+     * @param lambda A parameter determining the performance guarantees of the algorithm
+     */
     public AgentRunner(Integer numVertices, Integer id, Set<Integer> neighbors, CountDownLatch countdown, int lambda) {
         port = Constants.MESSAGE_PORT + id;
         this.id = id;
@@ -125,6 +133,11 @@ public class AgentRunner implements Runnable {
         }
     }
 
+    /**
+     * phaseOne of the algorithm generates short walks by coupon distribution. 
+     * Each node performs short random walks. At the end of the process, different nodes
+     * are holding a coupon containing the ID of the starting vertex v.
+     */
     public Map<Integer, List<CouponMessageRequest>> phaseOne(){
         Integer eta = 2;
 
@@ -150,6 +163,10 @@ public class AgentRunner implements Runnable {
        return coupons;
     }
 
+    /**
+     * This method waits to recieve coupons from the neighbors of the node, and then 
+     * forwards coupon to a uniformly random neighbor.
+     */
     public Map<Integer, List<CouponMessageRequest>> waitForCouponsAndSend(int iter, int lambda, Map<Integer, List<CouponMessageRequest>> coupons) {
         List<Integer> neighborList = neighbors.stream().toList();
         try {
@@ -205,6 +222,10 @@ public class AgentRunner implements Runnable {
 
     }
 
+    /**
+     * sendMoreCoupons is one of the subroutines of the algorithm focused on sending more coupons probabilistically 
+     * to neighbors of the node. It is broken up into sendMoreCouponsPart1 and sendMoreCouponsPart2.
+     */
     public void sendMoreCoupons(int vertex, int eta, int lambda) {
         sendMoreCouponsPart2(vertex, eta, lambda, sendMoreCouponsPart1(vertex, eta, lambda));
     }
@@ -232,6 +253,10 @@ public class AgentRunner implements Runnable {
         return coupons;
     }
 
+    /**
+     * Each coupon has now been forwarded for lambda steps. 
+     * These coupons are now extended probabilistically further by r steps where each r is independent and uniform in the range [0, lambda − 1].
+     */
     public void sendMoreCouponsPart2(int vertex, int eta, int lambda, Map<Integer, List<CouponMessageRequest>> coupons) {
         List<Integer> sourceNodes = new LinkedList<Integer>();
         List<Integer> neighborList = neighbors.stream().toList();
