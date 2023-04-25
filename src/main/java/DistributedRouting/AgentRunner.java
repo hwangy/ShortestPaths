@@ -241,6 +241,12 @@ public class AgentRunner implements Runnable {
         sendMoreCouponsPart2(vertex, eta, lambda, sendMoreCouponsPart1(vertex, eta, lambda));
     }
 
+    /** 
+     * Distribute eta new coupons for lambda steps.
+     * @param vertex the vertex id
+     * @param eta A performance parameter
+     * @param lambda A parameter determining the performance guarantees of the algorithm
+     */
     public Map<Integer, List<CouponMessageRequest>>  sendMoreCouponsPart1(int vertex, int eta, int lambda) {
 
         Map<Integer, List<CouponMessageRequest>> coupons = new HashMap<>();
