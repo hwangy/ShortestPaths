@@ -19,6 +19,11 @@ service Log {
   rpc CouponLog (CouponLogRequest) returns (StatusReply) {}
   rpc SendLog (MessageLog) returns (StatusReply) {}
   rpc SendNodeLog (NodeLog) returns (StatusReply) {}
+  rpc PathLog (PathRequest) returns (StatusReply) {}
+}
+
+message PathRequest {
+  repeated int32 nodes = 1;
 }
 
 message BFSDoneRequest {
@@ -35,6 +40,8 @@ enum Phase {
   SAMPLE_WAIT = 2;
   SAMPLE = 3;
   SYNC = 4;
+  BFS_COMPLETE = 5;
+  TERMINAL = 6;
 }
 
 message NodeLog {
@@ -79,8 +86,9 @@ message CouponMessageRequest {
   int32 origin_id = 2;
   int32 parent_id = 3;
   int32 current_walk_length = 4;
+  repeated int32 full_walk = 5;
   // Used for `SAMPLE_COUPON`
-  int32 weight = 5;
+  int32 weight = 6;
 }
 
 message CouponMessageReply {

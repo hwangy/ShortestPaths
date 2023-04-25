@@ -34,6 +34,7 @@ public class AgentRunner implements Runnable {
     private final int id;
 
     private final int lambda;
+    private final int totalLength;
 
     private final int numVertices;
     private Integer bfsParent = null;
@@ -77,12 +78,14 @@ public class AgentRunner implements Runnable {
      * @param countdown 
      * @param lambda A parameter determining the performance guarantees of the algorithm
      */
-    public AgentRunner(Integer numVertices, Integer id, Set<Integer> neighbors, CountDownLatch countdown, int lambda) {
+    public AgentRunner(Integer numVertices, Integer id, Set<Integer> neighbors,
+                       CountDownLatch countdown, int lambda, int totalLength) {
         port = Constants.MESSAGE_PORT + id;
         this.id = id;
         this.neighbors = neighbors;
         this.countdown = countdown;
         this.lambda = lambda;
+        this.totalLength = totalLength;
         this.numVertices = numVertices;
         this.core = new AgentCore();
 
@@ -148,6 +151,7 @@ public class AgentRunner implements Runnable {
         for (int i = 1; i <= numNeighbors; i++){
             startingCoupons.add(CouponMessageRequest.newBuilder()
                     .setCurrentWalkLength(0).setOriginId(id).setParentId(-1)
+                    .addFullWalk(id)
                     .setForward(i <= eta).build());
         }
         receivedCoupons.put(0, startingCoupons);
@@ -175,13 +179,13 @@ public class AgentRunner implements Runnable {
                 // Wait until we've received a message from all neighbors from
                 // iteration iter-1
                 if (receivedNeighbors.get(iter-1).size() == neighbors.size()) {
-                    loggingStub.couponLog(CouponLogRequest.newBuilder()
+                    /*loggingStub.couponLog(CouponLogRequest.newBuilder()
                             .addAllCoupons(receivedCoupons.get(iter-1))
-                            .setNodeId(id).build());
+                            .setNodeId(id).build());*/
                     Set<Integer> receivedFromNeighbors = receivedNeighbors.get(iter-1);
                     Queue<CouponMessageRequest> couponsToProcess = receivedCoupons.get(iter-1);
 
-                    Thread.sleep(500);
+                    Thread.sleep(250);
                     while (couponsToProcess.size() > 0) {
                         CouponMessageRequest req = couponsToProcess.poll();
 
@@ -193,6 +197,7 @@ public class AgentRunner implements Runnable {
                                 channelMap.get(randomNeighbor).sendCoupon(
                                         CouponMessageRequest.newBuilder(req)
                                                 .setParentId(id)
+                                                .addFullWalk(randomNeighbor)
                                                 .setCurrentWalkLength(req.getCurrentWalkLength() + 1).build());
 
                                 // This node will have received a message in this iteration
@@ -309,7 +314,7 @@ public class AgentRunner implements Runnable {
                     }
                     break;
                 } else if (bfsReceivedMessages.peek() != null) {
-                    Thread.sleep(500);
+                    Thread.sleep(100);
                     BFSMessageRequest msg = bfsReceivedMessages.poll();
 
                     if (!bfsAlreadyVisited) {
@@ -335,9 +340,7 @@ public class AgentRunner implements Runnable {
                                 if (!reply.getSuccess()) {
                                     Logging.logService("Received failure from " + vertex);
                                 } else {
-                                    loggingStub.sendLog(MessageLog.newBuilder()
-                                            .setSendingNode(id)
-                                            .setReceivingNode(vertex).build());
+                                    loggingStub.sendNodeLog(NodeLog.newBuilder().setNodeId(id).setPhase(Phase.BFS_COMPLETE).build());
                                 }
                             }
                         }
@@ -374,6 +377,7 @@ public class AgentRunner implements Runnable {
         loggingStub.sendNodeLog(NodeLog.newBuilder().setNodeId(id).setPhase(Phase.SAMPLE).build());
         List<CouponMessageRequest> originCoupons = coupons.getOrDefault(bfsOrigin, new ArrayList<>());
         List<CouponMessageRequest> fromChildren = (List) receivedCoupons.getOrDefault(bfsLevel, new LinkedList<>());
+
         CouponMessageRequest toForward = core.pickWithWeights(id, originCoupons, fromChildren);
         if (toForward == null) {
             toForward = CouponMessageRequest.newBuilder().setOriginId(id).setWeight(0).build();
@@ -397,25 +401,28 @@ public class AgentRunner implements Runnable {
         // Source node creates token and set of connectors
         int start = 1;
         if (id == 1) {
-            CouponMessageRequest token = CouponMessageRequest.newBuilder()
-                .setCurrentWalkLength(0).setOriginId(id).setParentId(-1)
-                .setForward(true).build();
             List<Integer> connectors = new LinkedList<Integer>();
             // Initially C = {s} where s is the source node
             connectors.add(id);
         }
 
-        int maxLength = 2;
-        for (int l = 0; l < maxLength; l++) {
+        // Run for Floor(totalLength/lambda) iterations.
+        for (int l = 0; l + lambda <= totalLength; l += lambda) {
             CouponMessageRequest next = sampleCoupon(start, coupons);
-            
+
+            /*
             if (next != null) {
                 sendMoreCoupons(id, eta, lambda);
                 next = sampleCoupon(id, coupons);
             }
+            */
             
             if (id == start) {
+                Logging.logInfo("Sampled path: " + next.getFullWalkList());
+                loggingStub.pathLog(PathRequest.newBuilder().addAllNodes(next.getFullWalkList()).build());
                 Logging.logInfo("Node " + id + " sampled " + next.getOriginId());
+                loggingStub.sendNodeLog(NodeLog.newBuilder()
+                        .setPhase(Phase.TERMINAL).setNodeId(next.getOriginId()).build());
             } else {
                 // Wait for coupon receipt
                 while (true) {
@@ -438,6 +445,9 @@ public class AgentRunner implements Runnable {
 
             loggingStub.sendNodeLog(NodeLog.newBuilder().setNodeId(id).setPhase(Phase.SYNC).build());
         }
+
+        // TODO: finish up the totalLength - lambda * Floor(totalLength/lambda) remaining steps?
+        //       or just ignore :P
 
         return destinationNode;
     }

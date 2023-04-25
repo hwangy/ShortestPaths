@@ -29,6 +29,8 @@ public class AgentController {
     private static HashMap<Integer, Graph> graphMap = new HashMap<>();
     private static SpriteManager manager;
 
+    private static int terminal = 1;
+
     public static Server initializeListener() throws Exception {
         Server server = Grpc.newServerBuilderForPort(Constants.MESSAGE_PORT, InsecureServerCredentials.create())
                 .addService(new AgentLoggerImpl())
@@ -51,7 +53,8 @@ public class AgentController {
     public static Graph drawGraph(RawGraph rawGraph) {
         Graph graph = new SingleGraph("Graph");
         for (Integer vertex : rawGraph.getVertices()) {
-            graph.addNode(vertex.toString());
+            Node node = graph.addNode(vertex.toString());
+            node.addAttribute("ui.label", vertex.toString());
         }
         graph.getNode(String.valueOf(1)).setAttribute("ui.class", "terminal");
         for (Map.Entry<Integer, Set<Integer>> entry : rawGraph.getEdges().entrySet()) {
@@ -110,12 +113,16 @@ public class AgentController {
                     fill-color: orange;
                 }
                 
+                node.bfsComplete {
+                    fill-color: orangered;
+                }
+                
                 node.wait {
-                    fill-color: purple;
+                    fill-color: lavender;
                 }
                 
                 node.sample {
-                    fill-color: red;
+                    fill-color: purple;
                 }
                 
                 node.sync {
@@ -138,8 +145,10 @@ public class AgentController {
         // Initialize Threads for each vertex
         graph = graph.asUndirectedGraph();
         int lambda = 5;
+        int totalLength = 15;
         for (Integer vertex : graph.getVertices()) {
-            Thread agent = new Thread(new AgentRunner(numVertices, vertex, graph.neighborsOf(vertex), countdown, lambda));
+            Thread agent = new Thread(new AgentRunner(
+                    numVertices, vertex, graph.neighborsOf(vertex), countdown, lambda, totalLength));
             agent.start();
         }
 
@@ -157,21 +166,28 @@ public class AgentController {
 
         @Override
         public void sendNodeLog(NodeLog log, StreamObserver<StatusReply> responseObserver) {
-            try {
-                graphLock.tryLock(500, TimeUnit.MILLISECONDS);
-                String nodeClass = switch (log.getPhaseValue()) {
-                    case Phase.DISTRIBUTE_VALUE -> "distribute";
-                    case Phase.BFS_VALUE -> "bfs";
-                    case Phase.SAMPLE_WAIT_VALUE -> "wait";
-                    case Phase.SAMPLE_VALUE -> "sample";
-                    case Phase.SYNC_VALUE -> "sync";
-                    default -> "";
-                };
-                graphMap.get(1).getNode(String.valueOf(log.getNodeId())).setAttribute("ui.class", nodeClass);
-            } catch (InterruptedException ex) {
-                Logging.logError("Failed to acquire lock for graph update: " + ex.getMessage());
-            } finally {
-                graphLock.unlock();
+            if (log.getNodeId() != terminal) {
+                try {
+                    graphLock.tryLock(500, TimeUnit.MILLISECONDS);
+                    String nodeClass = switch (log.getPhaseValue()) {
+                        case Phase.TERMINAL_VALUE -> {
+                            terminal = log.getNodeId();
+                            yield "terminal";
+                        }
+                        case Phase.DISTRIBUTE_VALUE -> "distribute";
+                        case Phase.BFS_VALUE -> "bfs";
+                        case Phase.BFS_COMPLETE_VALUE -> "bfsComplete";
+                        case Phase.SAMPLE_WAIT_VALUE -> "wait";
+                        case Phase.SAMPLE_VALUE -> "sample";
+                        case Phase.SYNC_VALUE -> "sync";
+                        default -> "";
+                    };
+                    graphMap.get(1).getNode(String.valueOf(log.getNodeId())).setAttribute("ui.class", nodeClass);
+                } catch (InterruptedException ex) {
+                    Logging.logError("Failed to acquire lock for graph update: " + ex.getMessage());
+                } finally {
+                    graphLock.unlock();
+                }
             }
             responseObserver.onNext(StatusReply.newBuilder().setSuccess(true).build());
             responseObserver.onCompleted();
@@ -188,6 +204,30 @@ public class AgentController {
                 Logging.logError("Failed to acquire lock for graph update: " + ex.getMessage());
             } finally {
                 graphLock.unlock();
+            }
+            responseObserver.onNext(StatusReply.newBuilder().setSuccess(true).build());
+            responseObserver.onCompleted();
+        }
+
+        @Override
+        public void pathLog(PathRequest req, StreamObserver<StatusReply> responseObserver) {
+            int last = -1;
+            Graph graphVis = graphMap.get(1);
+            List<Integer> traversedNodes = req.getNodesList();
+            for (int i = 0; i < traversedNodes.size(); i++) {
+                if (i > 0) {
+                    try {
+                        graphLock.tryLock(500, TimeUnit.MILLISECONDS);
+                        String label = GraphUtil.edgeLabel(last, traversedNodes.get(i));
+                        Edge edge = graphVis.getEdge(label);
+                        if (edge != null) edge.setAttribute("ui.color", 1);
+                    } catch (InterruptedException ex) {
+                        Logging.logError("Failed to acquire lock for graph update: " + ex.getMessage());
+                    } finally {
+                        graphLock.unlock();
+                    }
+                }
+                last = traversedNodes.get(i);
             }
             responseObserver.onNext(StatusReply.newBuilder().setSuccess(true).build());
             responseObserver.onCompleted();
