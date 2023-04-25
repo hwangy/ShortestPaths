@@ -37,13 +37,14 @@ public class AgentCore {
                 // and write this node's ID on the coupon
                 builder = CouponMessageRequest.newBuilder(ownCoupons.remove(randChoice - 1)).setOriginId(id);
             } else {
-                // Case: Coupon from a descendent in the BFS tree is selected
+                // Case: Coupon from a descendant in the BFS tree is selected
                 // Pick the coupon based off of `randChoice`
                 int sum = ownCoupons.size();
                 for (CouponMessageRequest msg : receivedCoupons) {
                     sum += msg.getWeight();
                     if (randChoice <= sum) {
                         builder = CouponMessageRequest.newBuilder(msg);
+                        break;
                     }
                 }
             }

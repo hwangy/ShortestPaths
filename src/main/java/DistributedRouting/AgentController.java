@@ -51,7 +51,8 @@ public class AgentController {
     public static Graph drawGraph(RawGraph rawGraph) {
         Graph graph = new SingleGraph("Graph");
         for (Integer vertex : rawGraph.getVertices()) {
-            graph.addNode(vertex.toString());
+            Node node = graph.addNode(vertex.toString());
+            node.addAttribute("ui.label", vertex.toString());
         }
         graph.getNode(String.valueOf(1)).setAttribute("ui.class", "terminal");
         for (Map.Entry<Integer, Set<Integer>> entry : rawGraph.getEdges().entrySet()) {
@@ -138,8 +139,10 @@ public class AgentController {
         // Initialize Threads for each vertex
         graph = graph.asUndirectedGraph();
         int lambda = 5;
+        int totalLength = 15;
         for (Integer vertex : graph.getVertices()) {
-            Thread agent = new Thread(new AgentRunner(numVertices, vertex, graph.neighborsOf(vertex), countdown, lambda));
+            Thread agent = new Thread(new AgentRunner(
+                    numVertices, vertex, graph.neighborsOf(vertex), countdown, lambda, totalLength));
             agent.start();
         }
 
