@@ -45,7 +45,6 @@ public class AgentRunner implements Runnable {
     private Integer bfsLevel;
 
     private AgentCore core;
-
     private CountDownLatch countdown;
 
     public Server initializeListener() throws IOException {
@@ -77,6 +76,7 @@ public class AgentRunner implements Runnable {
      * @param neighbors The neighbors of the node
      * @param countdown 
      * @param lambda A parameter determining the performance guarantees of the algorithm
+     * @param totalLength The total length of the path 
      */
     public AgentRunner(Integer numVertices, Integer id, Set<Integer> neighbors,
                        CountDownLatch countdown, int lambda, int totalLength) {
@@ -170,6 +170,9 @@ public class AgentRunner implements Runnable {
     /**
      * This method waits to recieve coupons from the neighbors of the node, and then 
      * forwards coupon to a uniformly random neighbor.
+     * @param iter the iteration number
+     * @param lambda A parameter determining the performance guarantees of the algorithm
+     * @param coupons The list of coupons
      */
     public Map<Integer, List<CouponMessageRequest>> waitForCouponsAndSend(int iter, int lambda, Map<Integer, List<CouponMessageRequest>> coupons) {
         List<Integer> neighborList = neighbors.stream().toList();
@@ -230,6 +233,9 @@ public class AgentRunner implements Runnable {
     /**
      * sendMoreCoupons is one of the subroutines of the algorithm focused on sending more coupons probabilistically 
      * to neighbors of the node. It is broken up into sendMoreCouponsPart1 and sendMoreCouponsPart2.
+     * @param vertex the vertex id
+     * @param eta A performance parameter
+     * @param lambda A parameter determining the performance guarantees of the algorithm
      */
     public void sendMoreCoupons(int vertex, int eta, int lambda) {
         sendMoreCouponsPart2(vertex, eta, lambda, sendMoreCouponsPart1(vertex, eta, lambda));
@@ -261,6 +267,10 @@ public class AgentRunner implements Runnable {
     /**
      * Each coupon has now been forwarded for lambda steps. 
      * These coupons are now extended probabilistically further by r steps where each r is independent and uniform in the range [0, lambda − 1].
+     * @param vertex the vertex id
+     * @param eta A performance parameter
+     * @param lambda A parameter determining the performance guarantees of the algorithm
+     * @param coupons The list of coupons
      */
     public void sendMoreCouponsPart2(int vertex, int eta, int lambda, Map<Integer, List<CouponMessageRequest>> coupons) {
         List<Integer> sourceNodes = new LinkedList<Integer>();
@@ -285,6 +295,7 @@ public class AgentRunner implements Runnable {
 
     /**
      * Receive and forward BFS messages.
+     * @param root The root of the BFS tree
      */
     public void bfsTree(int root) {
         bfsDoneCount = 0;
@@ -357,6 +368,11 @@ public class AgentRunner implements Runnable {
         //countdown.countDown();
     }
 
+    /**
+     * Given a starting node v (startId), outputs a node sampled from among the nodes holding the coupon of v.
+     * @param startId The id of the starting node
+     * @param coupons The list of coupons
+     */
     public CouponMessageRequest sampleCoupon(int startId, Map<Integer, List<CouponMessageRequest>> coupons) {
         // Clear all previously received coupons
         receivedCoupons.clear();
@@ -395,6 +411,10 @@ public class AgentRunner implements Runnable {
         }
     }
 
+    /**
+     * Phase Two of the algorithm stitches short walks by token forwarding
+     * @param coupons The list of coupons
+     */
     public Integer phaseTwo(Map<Integer, List<CouponMessageRequest>> coupons) {
         Integer destinationNode = -1;
 
@@ -482,7 +502,6 @@ public class AgentRunner implements Runnable {
         /**
          * On receiving a BFS message, `runBFS` will add the received `BFSMessageRequest` object
          * to a global queue, which can be read by the main thread.
-         * UNSURE IF THIS IS CORRECT.
          * @param req               A received BFSMessageRequest contained the sender's ID
          * @param responseObserver
          */
@@ -493,6 +512,12 @@ public class AgentRunner implements Runnable {
             responseObserver.onCompleted();
         }
 
+        /**
+         * On receiving a BFS child request message, `setChild` will add the received `BFSChildRequest` object's node ID
+         * to a global set treeChildren.
+         * @param req               A received BFSChildRequest contained the sender's ID
+         * @param responseObserver
+         */
         @Override
         public void setChild(BFSChildRequest req, StreamObserver<BFSMessageReply> responseObserver) {
             treeChildren.add(req.getNodeId());
@@ -500,13 +525,23 @@ public class AgentRunner implements Runnable {
             responseObserver.onCompleted();
         }
 
+        /**
+         * On receiving a BFS done reqest message, `completeBFS` will increment the bfsDoneCount.
+         *  @param reply               A received BFSDoneRequest
+         *  @param responseObserver
+         */
         @Override
-        public void completeBFS(BFSDoneRequest reply, StreamObserver<BFSMessageReply> responseObserer) {
+        public void completeBFS(BFSDoneRequest reply, StreamObserver<BFSMessageReply> responseObserver) {
             bfsDoneCount++;
-            responseObserer.onNext(GrpcUtil.genSuccessfulReplyBFS());
-            responseObserer.onCompleted();
+            responseObserver.onNext(GrpcUtil.genSuccessfulReplyBFS());
+            responseObserver.onCompleted();
         }
 
+        /**
+         * On receiving a coupon message request, `sendCoupon` wll update receivedCoupons and receivedNeighbors accordingly.
+         * @param req               A received CouponMessageRequest 
+         * @param responseObserver
+         */
         @Override
         public void sendCoupon(CouponMessageRequest req, StreamObserver<CouponMessageReply> responseObserver) {
             receivedCoupons.computeIfAbsent(req.getCurrentWalkLength(), k -> new LinkedList<>()).add(req);

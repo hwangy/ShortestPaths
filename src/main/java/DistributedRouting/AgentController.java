@@ -31,6 +31,9 @@ public class AgentController {
 
     private static int terminal = 1;
 
+    /**
+     * Initializes the listener, which listens for messages from the other machines (nodes)
+     */
     public static Server initializeListener() throws Exception {
         Server server = Grpc.newServerBuilderForPort(Constants.MESSAGE_PORT, InsecureServerCredentials.create())
                 .addService(new AgentLoggerImpl())
@@ -160,6 +163,9 @@ public class AgentController {
         }
     }
 
+    /**
+     * AgentLoggerImpl implements the functions related to logging the progress of the components of the distributed random walk algorithm.
+     */
     static class AgentLoggerImpl extends LogGrpc.LogImplBase {
         public AgentLoggerImpl() {
         }
