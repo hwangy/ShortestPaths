@@ -162,9 +162,9 @@ public class AgentRunner implements Runnable {
                 // Wait until we've received a message from all neighbors from
                 // iteration iter-1
                 if (receivedNeighbors.get(iter-1).size() == neighbors.size()) {
-                    loggingStub.couponLog(CouponLogRequest.newBuilder()
+                    /*loggingStub.couponLog(CouponLogRequest.newBuilder()
                             .addAllCoupons(receivedCoupons.get(iter-1))
-                            .setNodeId(id).build());
+                            .setNodeId(id).build());*/
                     Set<Integer> receivedFromNeighbors = receivedNeighbors.get(iter-1);
                     Queue<CouponMessageRequest> couponsToProcess = receivedCoupons.get(iter-1);
 
@@ -315,9 +315,7 @@ public class AgentRunner implements Runnable {
                                 if (!reply.getSuccess()) {
                                     Logging.logService("Received failure from " + vertex);
                                 } else {
-                                    loggingStub.sendLog(MessageLog.newBuilder()
-                                            .setSendingNode(id)
-                                            .setReceivingNode(vertex).build());
+                                    loggingStub.sendNodeLog(NodeLog.newBuilder().setNodeId(id).setPhase(Phase.BFS_COMPLETE).build());
                                 }
                             }
                         }
@@ -396,7 +394,10 @@ public class AgentRunner implements Runnable {
             
             if (id == start) {
                 Logging.logInfo("Sampled path: " + next.getFullWalkList());
+                loggingStub.pathLog(PathRequest.newBuilder().addAllNodes(next.getFullWalkList()).build());
                 Logging.logInfo("Node " + id + " sampled " + next.getOriginId());
+                loggingStub.sendNodeLog(NodeLog.newBuilder()
+                        .setPhase(Phase.TERMINAL).setNodeId(next.getOriginId()).build());
             } else {
                 // Wait for coupon receipt
                 while (true) {

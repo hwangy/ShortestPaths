@@ -19,12 +19,11 @@ service Log {
   rpc CouponLog (CouponLogRequest) returns (StatusReply) {}
   rpc SendLog (MessageLog) returns (StatusReply) {}
   rpc SendNodeLog (NodeLog) returns (StatusReply) {}
-  rpc WalkEdge (EdgeRequest) returns (StatusReply) {}
+  rpc PathLog (PathRequest) returns (StatusReply) {}
 }
 
-message EdgeRequest {
-  int32 origin_id = 1;
-  int32 dest_id = 2;
+message PathRequest {
+  repeated int32 nodes = 1;
 }
 
 message BFSDoneRequest {
@@ -41,6 +40,8 @@ enum Phase {
   SAMPLE_WAIT = 2;
   SAMPLE = 3;
   SYNC = 4;
+  BFS_COMPLETE = 5;
+  TERMINAL = 6;
 }
 
 message NodeLog {
