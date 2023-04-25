@@ -1,3 +1,13 @@
+## Overview and Design Decisions
+
+For this project, we implemented the distributed random walk algorithm from the paper `Distributed Random Walks` by Das Sarma, Nanongkai, Pandurangan, and  Tetali. Our goal is to understand the algorithm more deeply through implementing it, while also understanding the concerns and considerations taht may arise in an implementation of such an algorithm. This algorithm is also structured within the standard CONGEST communication model for distributed systems. This is a largely theoretical model, and so we are interested to see what considerations arise as we use this model in an implementation.
+
+Our code is structured as follows. First, the input graph is also the structure of the network: it determines which machines the network will have and also what the neighbors (connections) in the network. There is an `AgentController`, which starts each of the various machines. Each node of the graph should be viewed (in the algorithm and the implementation) as its own machine in the distributed system. The `AgentRunner` contains the methods specific to each of the machines/nodes, and each node of the graph should be viewed as its own `AgentRunner`. Nodes can only communicate with their neighbors in the graph.
+
+We have decided to use grpc for this project, as it's streamlined our code for past projects and is easy to use.
+
+We have also implemented visuals, which include color schemes to demonstrate which of the subroutines in the distributed random walk algorithm is happening at each of the nodes. This therefore reflects how the algorithm operates in a distributed fashion across the various nodes of the network.
+
 ## Log
 ### April 9th
 Implemented barebones service which is able to send messages throughout a graph. To do this,
