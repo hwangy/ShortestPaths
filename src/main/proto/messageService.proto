@@ -86,9 +86,10 @@ message CouponMessageRequest {
   int32 origin_id = 2;
   int32 parent_id = 3;
   int32 current_walk_length = 4;
-  repeated int32 full_walk = 5;
+  int32 max_walk_length = 5;
+  repeated int32 full_walk = 6;
   // Used for `SAMPLE_COUPON`
-  int32 weight = 6;
+  int32 weight = 7;
 }
 
 message CouponMessageReply {

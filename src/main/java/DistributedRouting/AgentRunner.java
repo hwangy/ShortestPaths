@@ -6,10 +6,7 @@ import DistributedRouting.util.GrpcUtil;
 import DistributedRouting.util.Logging;
 import io.grpc.*;
 import io.grpc.stub.StreamObserver;
-import org.checkerframework.checker.units.qual.A;
-import scala.Int;
 
-import javax.sound.midi.Receiver;
 import java.io.IOException;
 import java.util.*;
 import java.util.concurrent.CountDownLatch;
@@ -147,9 +144,13 @@ public class AgentRunner implements Runnable {
         Map<Integer, List<CouponMessageRequest>> coupons = new HashMap<>();
         int numNeighbors = neighbors.size();
 
+        // Pick a random additional length between 0 and lambda
+        int r = ThreadLocalRandom.current().nextInt(0,lambda+1);
+
         Queue<CouponMessageRequest> startingCoupons = new LinkedList<>();
         for (int i = 1; i <= numNeighbors; i++){
             startingCoupons.add(CouponMessageRequest.newBuilder()
+                    .setMaxWalkLength(lambda+r)
                     .setCurrentWalkLength(0).setOriginId(id).setParentId(-1)
                     .addFullWalk(id)
                     .setForward(i <= eta).build());
@@ -157,9 +158,9 @@ public class AgentRunner implements Runnable {
         receivedCoupons.put(0, startingCoupons);
         receivedNeighbors.put(0, new HashSet<>(neighbors));
 
-        // Iterate from 1 to lambda + 1. The final round is used for bookkeeping
-        for (int iter = 1; iter <= lambda + 1; iter++) {
-            waitForCouponsAndSend(iter, lambda, coupons);
+        // Iterate from 1 to 2*lambda + 1. The final round is used for bookkeeping
+        for (int iter = 1; iter <= 2*lambda + 1; iter++) {
+            waitForCouponsAndSend(iter, coupons);
         }
         // Indicate this node has finished distributing its coupons
         loggingStub.sendNodeLog(NodeLog.newBuilder().setNodeId(id).setPhase(Phase.DISTRIBUTE).build());
@@ -171,29 +172,28 @@ public class AgentRunner implements Runnable {
      * This method waits to recieve coupons from the neighbors of the node, and then 
      * forwards coupon to a uniformly random neighbor.
      * @param iter the iteration number
-     * @param lambda A parameter determining the performance guarantees of the algorithm
      * @param coupons The list of coupons
      */
-    public Map<Integer, List<CouponMessageRequest>> waitForCouponsAndSend(int iter, int lambda, Map<Integer, List<CouponMessageRequest>> coupons) {
+    public Map<Integer, List<CouponMessageRequest>> waitForCouponsAndSend(int iter, Map<Integer, List<CouponMessageRequest>> coupons) {
         List<Integer> neighborList = neighbors.stream().toList();
         try {
             while (true) {
                 Thread.sleep(1);
                 // Wait until we've received a message from all neighbors from
                 // iteration iter-1
-                if (receivedNeighbors.get(iter-1).size() == neighbors.size()) {
+                Set<Integer> received = receivedNeighbors.getOrDefault(iter-1, new HashSet<>());
+                if (received.size() == neighbors.size()) {
                     /*loggingStub.couponLog(CouponLogRequest.newBuilder()
                             .addAllCoupons(receivedCoupons.get(iter-1))
                             .setNodeId(id).build());*/
-                    Set<Integer> receivedFromNeighbors = receivedNeighbors.get(iter-1);
                     Queue<CouponMessageRequest> couponsToProcess = receivedCoupons.get(iter-1);
 
-                    Thread.sleep(250);
+                    Thread.sleep(200);
                     while (couponsToProcess.size() > 0) {
                         CouponMessageRequest req = couponsToProcess.poll();
 
                         if (req.getForward()) {
-                            if (req.getCurrentWalkLength() < lambda) {
+                            if (req.getCurrentWalkLength() < req.getMaxWalkLength()) {
                                 // Pick a neighbor of the vertex uniformly at random
                                 Integer randomNeighbor = neighborList.get(
                                         ThreadLocalRandom.current().nextInt(neighbors.size()));
@@ -204,17 +204,17 @@ public class AgentRunner implements Runnable {
                                                 .setCurrentWalkLength(req.getCurrentWalkLength() + 1).build());
 
                                 // This node will have received a message in this iteration
-                                receivedFromNeighbors.remove(randomNeighbor);
+                                received.remove(randomNeighbor);
                             } else {
                                 coupons.computeIfAbsent(req.getOriginId(), k -> new ArrayList<>()).add(req);
                             }
                         }
                     }
 
-                    if (iter == lambda + 1) break;
+                    if (iter == 2*lambda + 1) break;
                     // Now forward terminal coupons to the rest of the neighbors which
                     // have not received a message
-                    for (Integer others : receivedFromNeighbors) {
+                    for (Integer others : received) {
                         channelMap.get(others).sendCoupon(CouponMessageRequest.newBuilder()
                                 .setCurrentWalkLength(iter)
                                 .setParentId(id).setForward(false).build());
@@ -264,7 +264,7 @@ public class AgentRunner implements Runnable {
         // Check if this is ok or need to send c(u, v) and reconstruct that many coupons again. 
         // Can add this to design notebook as well.
         for (int iter = 1; iter <= lambda; iter++) {
-            waitForCouponsAndSend(iter, lambda, coupons);
+            waitForCouponsAndSend(iter, coupons);
         }
 
         return coupons;
@@ -326,6 +326,7 @@ public class AgentRunner implements Runnable {
                 if (bfsDoneCount == neighbors.size() && bfsReceivedMessages.size() == 0) {
                     loggingStub.sendNodeLog(NodeLog.newBuilder().setNodeId(id).setPhase(Phase.BFS).build());
                     if (bfsParent > 0) {
+                        sleep(100);
                         channelMap.get(bfsParent).completeBFS(
                                 BFSDoneRequest.newBuilder().setNodeId(id).build());
                     }
@@ -442,8 +443,10 @@ public class AgentRunner implements Runnable {
                 next = sampleCoupon(id, coupons);
             }
             */
-            
+
             if (id == start) {
+                if (next == null)
+                    Logging.logDebug("Node " + id + " got null. start: " + start);
                 Logging.logInfo("Sampled path: " + next.getFullWalkList());
                 loggingStub.pathLog(PathRequest.newBuilder().addAllNodes(next.getFullWalkList()).build());
                 Logging.logInfo("Node " + id + " sampled " + next.getOriginId());
