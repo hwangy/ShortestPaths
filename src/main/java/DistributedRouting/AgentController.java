@@ -148,10 +148,11 @@ public class AgentController {
         // Initialize Threads for each vertex
         graph = graph.asUndirectedGraph();
         int lambda = 5;
+        int eta = 5;
         int totalLength = 15;
         for (Integer vertex : graph.getVertices()) {
             Thread agent = new Thread(new AgentRunner(
-                    numVertices, vertex, graph.neighborsOf(vertex), countdown, lambda, totalLength));
+                    numVertices, vertex, graph.neighborsOf(vertex), countdown, lambda, eta, totalLength));
             agent.start();
         }
 
