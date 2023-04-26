@@ -93,7 +93,7 @@ public class AgentController {
             random = new Random(Long.valueOf(seed));
         }
 
-        int numVertices = 20;
+        int numVertices = 40;
         RawGraph graph = SampleGraphs.erdosReyniGraph(numVertices,0.15f, random);
         for (int i = 1; i <= 1; i++) {
             Graph graphVis = drawGraph(graph);
