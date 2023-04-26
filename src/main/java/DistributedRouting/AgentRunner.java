@@ -34,6 +34,7 @@ public class AgentRunner implements Runnable {
     private final int id;
 
     private final int lambda;
+    private final int eta;
     private final int totalLength;
 
     private final int numVertices;
@@ -79,12 +80,13 @@ public class AgentRunner implements Runnable {
      * @param totalLength The total length of the path 
      */
     public AgentRunner(Integer numVertices, Integer id, Set<Integer> neighbors,
-                       CountDownLatch countdown, int lambda, int totalLength) {
+                       CountDownLatch countdown, int lambda, int eta, int totalLength) {
         port = Constants.MESSAGE_PORT + id;
         this.id = id;
         this.neighbors = neighbors;
         this.countdown = countdown;
         this.lambda = lambda;
+        this.eta = eta;
         this.totalLength = totalLength;
         this.numVertices = numVertices;
         this.core = new AgentCore();
@@ -142,8 +144,6 @@ public class AgentRunner implements Runnable {
      * are holding a coupon containing the ID of the starting vertex v.
      */
     public Map<Integer, List<CouponMessageRequest>> phaseOne(){
-        Integer eta = 2;
-
         Map<Integer, List<CouponMessageRequest>> coupons = new HashMap<>();
         int numNeighbors = neighbors.size();
 
@@ -192,7 +192,7 @@ public class AgentRunner implements Runnable {
                     while (couponsToProcess.size() > 0) {
                         CouponMessageRequest req = couponsToProcess.poll();
 
-                        if (req.getForward()) {
+                        if (req.getForward() && neighbors != null && neighbors.size() > 0) {
                             if (req.getCurrentWalkLength() < lambda) {
                                 // Pick a neighbor of the vertex uniformly at random
                                 Integer randomNeighbor = neighborList.get(
@@ -215,9 +215,11 @@ public class AgentRunner implements Runnable {
                     // Now forward terminal coupons to the rest of the neighbors which
                     // have not received a message
                     for (Integer others : receivedFromNeighbors) {
-                        channelMap.get(others).sendCoupon(CouponMessageRequest.newBuilder()
+                        //if (channelMap.get(others) != null) {
+                            channelMap.get(others).sendCoupon(CouponMessageRequest.newBuilder()
                                 .setCurrentWalkLength(iter)
                                 .setParentId(id).setForward(false).build());
+                        //}
                     }
                     break;
                 }
@@ -264,6 +266,7 @@ public class AgentRunner implements Runnable {
         // Check if this is ok or need to send c(u, v) and reconstruct that many coupons again. 
         // Can add this to design notebook as well.
         for (int iter = 1; iter <= lambda; iter++) {
+            // ISSUE: RECEIVED NEIGHBORS IS NULL.
             waitForCouponsAndSend(iter, lambda, coupons);
         }
 
@@ -325,7 +328,7 @@ public class AgentRunner implements Runnable {
 
                 if (bfsDoneCount == neighbors.size() && bfsReceivedMessages.size() == 0) {
                     loggingStub.sendNodeLog(NodeLog.newBuilder().setNodeId(id).setPhase(Phase.BFS).build());
-                    if (bfsParent > 0) {
+                    if (bfsParent != null && bfsParent > 0) {
                         channelMap.get(bfsParent).completeBFS(
                                 BFSDoneRequest.newBuilder().setNodeId(id).build());
                     }
@@ -408,11 +411,14 @@ public class AgentRunner implements Runnable {
         // Clear all previously received coupons
         receivedCoupons.clear();
         receivedNeighbors.clear();
-        if (bfsLevel == 0) {
+        if (bfsLevel != null && bfsLevel == 0) {
             return toForward;
-        } else {
+        } else if (bfsLevel != null){
             channelMap.get(bfsParent).sendCoupon(CouponMessageRequest.newBuilder(toForward)
                     .setCurrentWalkLength(bfsLevel - 1).build());
+            return null;
+        } else {
+            // Unsure what to do here
             return null;
         }
     }
@@ -436,12 +442,10 @@ public class AgentRunner implements Runnable {
         for (int l = 0; l + lambda <= totalLength; l += lambda) {
             CouponMessageRequest next = sampleCoupon(start, coupons);
 
-            /*
-            if (next != null) {
+            if (next == null) {
                 sendMoreCoupons(id, eta, lambda);
                 next = sampleCoupon(id, coupons);
             }
-            */
             
             if (id == start) {
                 Logging.logInfo("Sampled path: " + next.getFullWalkList());
@@ -484,10 +488,7 @@ public class AgentRunner implements Runnable {
      * except the one from which the message was received.
      */
     public void run() {
-        initializeConnections();
-
-        // how to set lambda / should we put it as a parameter?
-        Integer lambda = 1;
+        initializeConnections(); 
 
         Map<Integer, List<CouponMessageRequest>> coupons = phaseOne();
         Integer destinationNode = phaseTwo(coupons);
