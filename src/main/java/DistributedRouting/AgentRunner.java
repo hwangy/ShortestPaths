@@ -148,12 +148,16 @@ public class AgentRunner implements Runnable {
         int r = ThreadLocalRandom.current().nextInt(0,lambda+1);
 
         Queue<CouponMessageRequest> startingCoupons = new LinkedList<>();
+        int tmpEta = eta;
+        if (id == 1) {
+            tmpEta = 0;
+        }
         for (int i = 1; i <= numNeighbors; i++){
             startingCoupons.add(CouponMessageRequest.newBuilder()
                     .setMaxWalkLength(lambda+r)
                     .setCurrentWalkLength(0).setOriginId(id).setParentId(-1)
                     .addFullWalk(id)
-                    .setForward(i <= eta).build());
+                    .setForward(i <= tmpEta).build());
         }
         receivedCoupons.put(0, startingCoupons);
         receivedNeighbors.put(0, new HashSet<>(neighbors));
@@ -248,6 +252,7 @@ public class AgentRunner implements Runnable {
      * @param lambda A parameter determining the performance guarantees of the algorithm
      */
     public Map<Integer, List<CouponMessageRequest>>  sendMoreCouponsPart1(int vertex, int eta, int lambda) {
+        Logging.logDebug("Node " + id  + "entering coupons part1");
 
         Map<Integer, List<CouponMessageRequest>> coupons = new HashMap<>();
 
@@ -279,6 +284,7 @@ public class AgentRunner implements Runnable {
      * @param coupons The list of coupons
      */
     public void sendMoreCouponsPart2(int vertex, int eta, int lambda, Map<Integer, List<CouponMessageRequest>> coupons) {
+        Logging.logDebug("Node " + id  + "entering coupons part2");
         List<Integer> sourceNodes = new LinkedList<Integer>();
         List<Integer> neighborList = neighbors.stream().toList();
         
@@ -409,14 +415,14 @@ public class AgentRunner implements Runnable {
         // Clear all previously received coupons
         receivedCoupons.clear();
         receivedNeighbors.clear();
-        if (bfsLevel != null && bfsLevel == 0) {
+        if (bfsLevel == 0) {
             return toForward;
         } else if (bfsLevel != null){
             channelMap.get(bfsParent).sendCoupon(CouponMessageRequest.newBuilder(toForward)
                     .setCurrentWalkLength(bfsLevel - 1).build());
             return null;
         } else {
-            // Unsure what to do here
+            Logging.logError("Node " + id + " has null BFS level.");
             return null;
         }
     }
@@ -440,10 +446,28 @@ public class AgentRunner implements Runnable {
         for (int l = 0; l + lambda <= totalLength; l += lambda) {
             CouponMessageRequest next = sampleCoupon(start, coupons);
 
-            /*if (next == null) {
+            // 1. Some argument to waitForCouponsAndSend which indicates *which* vertices
+            //      actually need to send more coupons
+            // 2. *All (not source) vertices should enter a phase where they wait for
+            //      confirmation that the source correctly sampled a coupon
+            // 3. Source sends message down BFS tree indicating that they either sampled
+            //      a coupon or failed to sample
+            // 4. If child gets failed message, they enter "sendMoreCouponsAndWait" phase
+            //    Otherwise they continue to normal logic
+
+            // Rather than 2,
+            // - The next message verties would *normally* get is lines 498 (sendCoupon)
+            // 1. Replace `sendCoupon` to something like `setOrigin` rpc call to indicate who's the start of
+            //      the next iteration.
+            // 2. Augment the current wait logic (lines 482-488) to check whether the message they receive
+            //      is `setOrigin` (indicating normal operation) or `sendCoupon` (indicating they need to enter
+            //      sendMoreCoupons phase)
+
+            if (next != null && next.getWeight() == 0) {
+                Logging.logDebug("Weight is 0 for id " + id);
                 sendMoreCoupons(id, eta, lambda);
                 next = sampleCoupon(id, coupons);
-            }*/
+            }
 
             if (id == start) {
                 if (next == null)
@@ -460,6 +484,8 @@ public class AgentRunner implements Runnable {
                     if (receivedCoupons.get(bfsLevel) != null && receivedCoupons.get(bfsLevel).peek() != null) {
                         next = receivedCoupons.get(bfsLevel).poll();
                         break;
+                    } else (/* some condition to check whether they recieve setOrigin call */) {
+
                     }
                 }
             }
