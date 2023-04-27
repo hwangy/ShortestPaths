@@ -33,13 +33,14 @@ public class AgentRunner implements Runnable {
     private final int lambda;
     private final int totalLength;
 
-    private final int numVertices;
     private Integer bfsParent = null;
     private Integer bfsOrigin = null;
     private Boolean bfsAlreadyVisited;
 
     private Integer bfsDoneCount = 0;
     private Integer bfsLevel;
+
+    private Integer stepCount = 0;
 
     private AgentCore core;
     private CountDownLatch countdown;
@@ -68,14 +69,13 @@ public class AgentRunner implements Runnable {
 
     /**
      * Constructor for AgentRunner, which initializes all of the variable and the listener.
-     * @param numVertices the number of vertices in the graph
      * @param id The id of the node (the machine being run)
      * @param neighbors The neighbors of the node
      * @param countdown 
      * @param lambda A parameter determining the performance guarantees of the algorithm
      * @param totalLength The total length of the path 
      */
-    public AgentRunner(Integer numVertices, Integer id, Set<Integer> neighbors,
+    public AgentRunner(Integer id, Set<Integer> neighbors,
                        CountDownLatch countdown, int lambda, int totalLength) {
         port = Constants.MESSAGE_PORT + id;
         this.id = id;
@@ -83,7 +83,6 @@ public class AgentRunner implements Runnable {
         this.countdown = countdown;
         this.lambda = lambda;
         this.totalLength = totalLength;
-        this.numVertices = numVertices;
         this.core = new AgentCore();
 
         treeChildren = new HashSet<>();
@@ -183,6 +182,7 @@ public class AgentRunner implements Runnable {
                 // iteration iter-1
                 Set<Integer> received = receivedNeighbors.getOrDefault(iter-1, new HashSet<>());
                 if (received.size() == neighbors.size()) {
+                    stepCount++;
                     /*loggingStub.couponLog(CouponLogRequest.newBuilder()
                             .addAllCoupons(receivedCoupons.get(iter-1))
                             .setNodeId(id).build());*/
@@ -190,6 +190,7 @@ public class AgentRunner implements Runnable {
 
                     Thread.sleep(200);
                     while (couponsToProcess.size() > 0) {
+                        stepCount++;
                         CouponMessageRequest req = couponsToProcess.poll();
 
                         if (req.getForward()) {
@@ -215,6 +216,7 @@ public class AgentRunner implements Runnable {
                     // Now forward terminal coupons to the rest of the neighbors which
                     // have not received a message
                     for (Integer others : received) {
+                        stepCount++;
                         channelMap.get(others).sendCoupon(CouponMessageRequest.newBuilder()
                                 .setCurrentWalkLength(iter)
                                 .setParentId(id).setForward(false).build());

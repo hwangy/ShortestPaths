@@ -151,7 +151,7 @@ public class AgentController {
         int totalLength = 15;
         for (Integer vertex : graph.getVertices()) {
             Thread agent = new Thread(new AgentRunner(
-                    numVertices, vertex, graph.neighborsOf(vertex), countdown, lambda, totalLength));
+                    vertex, graph.neighborsOf(vertex), countdown, lambda, totalLength));
             agent.start();
         }
 
