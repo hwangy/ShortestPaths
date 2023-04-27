@@ -442,10 +442,11 @@ public class AgentRunner implements Runnable {
         for (int l = 0; l + lambda <= totalLength; l += lambda) {
             CouponMessageRequest next = sampleCoupon(start, coupons);
 
-            /*if (next == null) {
+            if (next != null && next.getWeight() == 0) {
+                Logging.logDebug("Weight is 0 for id " + id);
                 sendMoreCoupons(id, eta, lambda);
                 next = sampleCoupon(id, coupons);
-            }*/
+            }
 
             if (id == start) {
                 if (next == null)
