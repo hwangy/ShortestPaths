@@ -13,6 +13,7 @@ service Message {
   rpc SetChild (BFSChildRequest) returns (BFSMessageReply) {}
   rpc CompleteBFS (BFSDoneRequest) returns (BFSMessageReply) {}
   rpc SendCoupon (CouponMessageRequest) returns (CouponMessageReply) {}
+  rpc SendOrigin (OriginMessageRequest) returns (OriginMessageReply) {}
 }
 
 service Log {
@@ -93,5 +94,13 @@ message CouponMessageRequest {
 }
 
 message CouponMessageReply {
+  bool success = 1;
+}
+
+message OriginMessageRequest {
+  int32 origin_id = 1;
+}
+
+message OriginMessageReply {
   bool success = 1;
 }

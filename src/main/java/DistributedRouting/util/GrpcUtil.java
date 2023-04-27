@@ -3,6 +3,7 @@ package DistributedRouting.util;
 import DistributedRouting.grpc.MessageReply;
 import DistributedRouting.grpc.BFSMessageReply;
 import DistributedRouting.grpc.CouponMessageReply;
+import DistributedRouting.grpc.OriginMessageReply;
 
 
 public class GrpcUtil {
@@ -26,4 +27,13 @@ public class GrpcUtil {
     public static CouponMessageReply genSuccessfulReplyCoupon() {
         return CouponMessageReply.newBuilder().setSuccess(true).build();
     }
+
+    /**
+     * Generates an origin message reply for success
+     */
+    public static OriginMessageReply genSuccessfulReplyOrigin() {
+        return OriginMessageReply.newBuilder().setSuccess(true).build();
+    }
+
+
 }
