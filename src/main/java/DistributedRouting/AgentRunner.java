@@ -21,7 +21,7 @@ public class AgentRunner implements Runnable {
     private Queue<BFSMessageRequest> bfsReceivedMessages;
 
     private HashMap<Integer, Queue<CouponMessageRequest>> receivedCoupons;
-    private HashMap<Integer, Queue<CouponMessageRequest>> receivedOrigin;
+    private Queue<OriginMessageRequest> receivedOrigin;
     private HashMap<Integer, Set<Integer>> receivedNeighbors;
 
     private LogGrpc.LogBlockingStub loggingStub;
@@ -93,7 +93,7 @@ public class AgentRunner implements Runnable {
         bfsReceivedMessages = new LinkedList<>();
         receivedCoupons = new HashMap<>();
         receivedNeighbors = new HashMap<>();
-        receivedOrigin = new HashMap<>();
+        receivedOrigin = new LinkedList<>();
         for (int i = 0; i <= lambda; i++) {
             receivedCoupons.put(i, new LinkedList<>());
             receivedNeighbors.put(i, new HashSet<>());
@@ -151,9 +151,9 @@ public class AgentRunner implements Runnable {
 
         Queue<CouponMessageRequest> startingCoupons = new LinkedList<>();
         int tmpEta = eta;
-        if (id == 1) {
+        /*if (id == 1) {
             tmpEta = 0;
-        }
+        }*/
         for (int i = 1; i <= numNeighbors; i++){
             startingCoupons.add(CouponMessageRequest.newBuilder()
                     .setMaxWalkLength(lambda+r)
@@ -179,7 +179,6 @@ public class AgentRunner implements Runnable {
      * forwards coupon to a uniformly random neighbor.
      * @param iter the iteration number
      * @param coupons The list of coupons
-     * @param senderNodes The nodes to do the sending of coupons (If it's null or empty, all nodes should send coupons.)
      */
     public Map<Integer, List<CouponMessageRequest>> waitForCouponsAndSend(int iter, Map<Integer, List<CouponMessageRequest>> coupons) {
         List<Integer> neighborList = neighbors.stream().toList();
@@ -393,6 +392,7 @@ public class AgentRunner implements Runnable {
         // Clear all previously received coupons
         receivedCoupons.clear();
         receivedNeighbors.clear();
+        receivedOrigin.clear();
 
         bfsTree(startId);
 
@@ -418,7 +418,6 @@ public class AgentRunner implements Runnable {
         // Clear all previously received coupons
         receivedCoupons.clear();
         receivedNeighbors.clear();
-        receivedOrigin.clear();
         if (bfsLevel == 0) {
             return toForward;
         } else if (bfsLevel != null){
@@ -477,6 +476,7 @@ public class AgentRunner implements Runnable {
                 next = sampleCoupon(id, coupons);
             }
 
+            OriginMessageRequest originMessageFromNext;
             if (id == start) {
                 if (next == null)
                     Logging.logDebug("Node " + id + " got null. start: " + start);
@@ -485,18 +485,21 @@ public class AgentRunner implements Runnable {
                 Logging.logInfo("Node " + id + " sampled " + next.getOriginId());
                 loggingStub.sendNodeLog(NodeLog.newBuilder()
                         .setPhase(Phase.TERMINAL).setNodeId(next.getOriginId()).build());
+
+                originMessageFromNext = OriginMessageRequest.newBuilder().setOriginId(next.getOriginId()).build();
             } else {
                 // Wait for coupon receipt
                 while (true) {
                     sleep(500);
 
-                    if (receivedCoupons.get(bfsLevel) != null && receivedCoupons.get(bfsLevel).peek() != null) {
+                    // Receiving a coupon at level one indicates start of another coupon sending phase
+                    if (receivedCoupons.get(1) != null && receivedCoupons.get(1).peek() != null) {
                         Logging.logInfo("Node " + id + " in receivedCoupons case.");
-                        CouponMessageRequest req = receivedCoupons.get(bfsLevel).poll();
+                        /*CouponMessageRequest req = receivedCoupons.get(bfsLevel).poll();
                         req = CouponMessageRequest.newBuilder(req).setCurrentWalkLength(bfsLevel+1).build();
                         for (int child : treeChildren) {
                             channelMap.get(child).sendCoupon(req);
-                        }
+                        }*/
 
                         phaseOne(false);
                         /*for(int iter = 1; iter <= 2 * lambda + 1; iter ++) {
@@ -506,8 +509,8 @@ public class AgentRunner implements Runnable {
 
                         Logging.logInfo("Node " + id + " after all wait for coupons.");
 
-                    }  else if (receivedOrigin.get(bfsLevel) != null && receivedCoupons.get(bfsLevel).peek() != null) {
-                        next = receivedOrigin.get(bfsLevel).poll();
+                    }  else if (receivedOrigin.peek() != null) {
+                        originMessageFromNext = receivedOrigin.poll();
                         break;
                     }
                 }
@@ -521,7 +524,6 @@ public class AgentRunner implements Runnable {
             */
 
             // Forward request to children
-            OriginMessageRequest originMessageFromNext = OriginMessageRequest.newBuilder().setOriginId(next.getOriginId()).build();
             for (int child : treeChildren) {
                 //channelMap.get(child).sendCoupon(next);
                 channelMap.get(child).sendOrigin(originMessageFromNext);
@@ -618,6 +620,7 @@ public class AgentRunner implements Runnable {
          */
         @Override
         public void sendOrigin(OriginMessageRequest req, StreamObserver<OriginMessageReply> responseObserver) {
+            receivedOrigin.add(req);
             responseObserver.onNext(GrpcUtil.genSuccessfulReplyOrigin());
             responseObserver.onCompleted();
         }
