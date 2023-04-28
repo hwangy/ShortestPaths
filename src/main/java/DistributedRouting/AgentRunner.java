@@ -137,12 +137,16 @@ public class AgentRunner implements Runnable {
         }
     }
 
+    public Map<Integer, List<CouponMessageRequest>> phaseOne(Boolean shouldForward) {
+        return phaseOne(shouldForward, false);
+    }
+
     /**
      * phaseOne of the algorithm generates short walks by coupon distribution. 
      * Each node performs short random walks. At the end of the process, different nodes
      * are holding a coupon containing the ID of the starting vertex v.
      */
-    public Map<Integer, List<CouponMessageRequest>> phaseOne(Boolean shouldForward){
+    public Map<Integer, List<CouponMessageRequest>> phaseOne(Boolean shouldForward, Boolean firstTime){
         Map<Integer, List<CouponMessageRequest>> coupons = new HashMap<>();
         int numNeighbors = neighbors.size();
 
@@ -151,9 +155,9 @@ public class AgentRunner implements Runnable {
 
         Queue<CouponMessageRequest> startingCoupons = new LinkedList<>();
         int tmpEta = eta;
-        /*if (id == 1) {
+        if (id == 1 && firstTime) {
             tmpEta = 0;
-        }*/
+        }
         for (int i = 1; i <= numNeighbors; i++){
             startingCoupons.add(CouponMessageRequest.newBuilder()
                     .setMaxWalkLength(lambda+r)
@@ -446,8 +450,10 @@ public class AgentRunner implements Runnable {
         }
 
         // Run for Floor(totalLength/lambda) iterations.
-        for (int l = 0; l + lambda <= totalLength; l += lambda) {
+        int l = 0;
+        while (l + lambda <= totalLength) {
             CouponMessageRequest next = sampleCoupon(start, coupons);
+            //Logging.logDebug("Size of coupons is " + receivedCoupons.getOrDefault(1, new LinkedList<>()).size());
 
             // 1. Some argument to waitForCouponsAndSend which indicates *which* vertices
             //      actually need to send more coupons
@@ -473,10 +479,10 @@ public class AgentRunner implements Runnable {
                     waitForCouponsAndSend(iter, coupons);
                 }*/
                 phaseOne(true);
-                next = sampleCoupon(id, coupons);
+                continue;
             }
 
-            OriginMessageRequest originMessageFromNext;
+            OriginMessageRequest originMessageFromNext = null;
             if (id == start) {
                 if (next == null)
                     Logging.logDebug("Node " + id + " got null. start: " + start);
@@ -489,6 +495,7 @@ public class AgentRunner implements Runnable {
                 originMessageFromNext = OriginMessageRequest.newBuilder().setOriginId(next.getOriginId()).build();
             } else {
                 // Wait for coupon receipt
+                boolean reset = false;
                 while (true) {
                     sleep(500);
 
@@ -502,17 +509,22 @@ public class AgentRunner implements Runnable {
                         }*/
 
                         phaseOne(false);
+                        reset = true;
                         /*for(int iter = 1; iter <= 2 * lambda + 1; iter ++) {
                             Logging.logInfo("Node " + id + " in wait for coupons iteration " + iter);
                             waitForCouponsAndSend(iter, coupons);
                         }*/
 
                         Logging.logInfo("Node " + id + " after all wait for coupons.");
-
+                        break;
                     }  else if (receivedOrigin.peek() != null) {
+                        Logging.logInfo("Node " + id + " in receivedOrigin case.");
                         originMessageFromNext = receivedOrigin.poll();
                         break;
                     }
+                }
+                if (reset) {
+                    continue;
                 }
             }
 
@@ -531,6 +543,7 @@ public class AgentRunner implements Runnable {
             start = originMessageFromNext.getOriginId();
 
             loggingStub.sendNodeLog(NodeLog.newBuilder().setNodeId(id).setPhase(Phase.SYNC).build());
+            l += lambda;
         }
 
         // TODO: finish up the totalLength - lambda * Floor(totalLength/lambda) remaining steps?
@@ -547,7 +560,7 @@ public class AgentRunner implements Runnable {
     public void run() {
         initializeConnections(); 
 
-        Map<Integer, List<CouponMessageRequest>> coupons = phaseOne(true);
+        Map<Integer, List<CouponMessageRequest>> coupons = phaseOne(true, true);
         Integer destinationNode = phaseTwo(coupons);
         Logging.logInfo("Node " + id + " exiting.");
     }
