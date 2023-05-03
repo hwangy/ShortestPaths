@@ -15,30 +15,3 @@ Overall, our design decisions reflected the structure and steps of the distribut
 One design decision that diverged from the algorithm was in the send-more-coupons algorithm, Part 1. In the theoretical algorithm, it states tat neigbors of a node should send the ID of the node v and the number of coupons for which z is picked as a reciever, denoted by c(u, v). When z receives messages, he reconstructs c(u, v) corresponding messages. However, we found that the number c(u, v) could be inferred by the number of messages that were sent to z, without the need to compress the c(u, v) messages into one and then un-compress them. We do not think there is a reason to send c(u, v) at the level of the implementation.
 
 Another design decision arose around constructing message request and message reply objects with grpc. In our messageService proto, we chose to create message requests and replies of the form: generic message request/reply, bfs message request/reply, coupon message request/reply. We found that having different request and reply message objects for each of these categories avoided confusion and allowed us to tailor the messages being sent for the various tasks in the algorithm.
-
-## Log
-### April 9th
-Implemented barebones service which is able to send messages throughout a graph. To do this,
-we implemented a `AgentController`, which starts up threads corresponding to each of the nodes.
-Each node (which is a `AgentRunner` object) can send and receive messages across its adjacent
-edges.
-
->**Visualization**
-> In order to allow visualization of the system, we implemented an additional service, called
-> `Log`. Each node, after sending and receiving confirmation of a message, will log the call
-> to the `AgentController`. The `AgentController` can then visualize / collect statistics
-> about the system.
-
-```protobuf
-service Log {
-  rpc SendLog (MessageLog) returns (StatusReply) {}
-}
-
-message MessageLog {
-  int32 sending_node = 1;
-  int32 receiving_node = 2;
-}
-message StatusReply {
-  bool success = 1;
-}
-```

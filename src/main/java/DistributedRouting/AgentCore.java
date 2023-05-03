@@ -20,6 +20,14 @@ public class AgentCore {
     public AgentCore(ThreadLocalRandom random) {
         this.random = random;
     }
+
+    /**
+     * Picks a coupon between those received from children as well as coupons held by the node itself.
+     * @param id                The ID of the node.
+     * @param ownCoupons        A list of held coupons.
+     * @param receivedCoupons   A list of received coupons.
+     * @return                  Return the selected coupon.
+     */
     public CouponMessageRequest pickWithWeights(int id, List<CouponMessageRequest> ownCoupons,
                                                  List<CouponMessageRequest> receivedCoupons) {
         // Get the cumulative weights of the coupons

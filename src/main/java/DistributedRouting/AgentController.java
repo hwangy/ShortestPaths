@@ -93,8 +93,8 @@ public class AgentController {
             random = new Random(Long.valueOf(seed));
         }
 
-        int numVertices = 40;
-        RawGraph graph = SampleGraphs.erdosReyniGraph(numVertices,0.15f, random);
+        int numVertices = 20;
+        RawGraph graph = SampleGraphs.erdosReyniGraph(numVertices,0.2f, random);
         for (int i = 1; i <= 1; i++) {
             Graph graphVis = drawGraph(graph);
             graphVis.setAttribute("ui.stylesheet", """
@@ -171,6 +171,11 @@ public class AgentController {
         public AgentLoggerImpl() {
         }
 
+        /**
+         * Logs the status of a node as it moves throughout the algorithm.
+         * @param log   A NodeLog, which contains the current phase of the node.
+         * @param responseObserver
+         */
         @Override
         public void sendNodeLog(NodeLog log, StreamObserver<StatusReply> responseObserver) {
             if (log.getNodeId() != terminal) {
@@ -201,6 +206,11 @@ public class AgentController {
 
         }
 
+        /**
+         * Logs a message sent along an edge.
+         * @param req   The edge used by the message.
+         * @param responseObserver
+         */
         @Override
         public void sendLog(MessageLog req, StreamObserver<StatusReply> responseObserver) {
             String label = GraphUtil.edgeLabel(req.getSendingNode(), req.getReceivingNode());
@@ -216,6 +226,11 @@ public class AgentController {
             responseObserver.onCompleted();
         }
 
+        /**
+         * Logs a generated path from a coupon.
+         * @param req   A PathRequest containing the nodes traversed by the coupon.
+         * @param responseObserver
+         */
         @Override
         public void pathLog(PathRequest req, StreamObserver<StatusReply> responseObserver) {
             int last = -1;
@@ -240,6 +255,12 @@ public class AgentController {
             responseObserver.onCompleted();
         }
 
+        /**
+         * Logs the receipt of a coupon at a node.
+         *
+         * @param req   A CouponeLogRequest containing the node receiving the coupon.
+         * @param responseObserver
+         */
         @Override
         public void couponLog(CouponLogRequest req, StreamObserver<StatusReply> responseObserver) {
             for (CouponMessageRequest coupon : req.getCouponsList()) {
